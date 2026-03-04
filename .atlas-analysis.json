@@ -1,0 +1,153 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "Rust",
+  "projectDescription": "A language empowering everyone to build reliable and efficient software",
+  "theme": "aspen",
+  "primaryColor": "#CE422B",
+  "lightColor": "#F74C00",
+  "darkColor": "#A33124",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Building from Source",
+            "pages": [
+              "building/overview",
+              "building/dependencies",
+              "building/unix",
+              "building/windows",
+              "building/configuration"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/compiler",
+              "architecture/standard-library",
+              "architecture/bootstrap"
+            ]
+          },
+          {
+            "group": "Compiler",
+            "pages": [
+              "compiler/overview",
+              "compiler/frontend",
+              "compiler/mir",
+              "compiler/codegen",
+              "compiler/incremental"
+            ]
+          },
+          {
+            "group": "Standard Library",
+            "pages": [
+              "stdlib/core",
+              "stdlib/alloc",
+              "stdlib/std",
+              "stdlib/proc-macro"
+            ]
+          },
+          {
+            "group": "Tooling",
+            "pages": [
+              "tools/cargo",
+              "tools/rustdoc",
+              "tools/clippy",
+              "tools/rustfmt",
+              "tools/miri"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Contributing",
+        "groups": [
+          {
+            "group": "Contributing Guide",
+            "pages": [
+              "contributing/overview",
+              "contributing/setup",
+              "contributing/workflow",
+              "contributing/testing"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/compiler-development",
+              "development/library-development",
+              "development/debugging",
+              "development/profiling"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Compiler Internals",
+            "pages": [
+              "reference/compiler-crates",
+              "reference/passes",
+              "reference/queries"
+            ]
+          },
+          {
+            "group": "Build System",
+            "pages": [
+              "reference/bootstrap",
+              "reference/x-py",
+              "reference/configuration-options"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "reference/platform-support",
+              "reference/release-process",
+              "reference/glossary"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Self-hosting compiler with 75+ internal crates",
+    "Complete standard library (core, alloc, std)",
+    "Sophisticated bootstrap build system",
+    "Integrated tooling ecosystem (Cargo, Clippy, Rustfmt)",
+    "Multi-backend code generation (LLVM, Cranelift, GCC)",
+    "Cross-platform support with tier system",
+    "MIR-based intermediate representation",
+    "Incremental compilation support"
+  ],
+  "publicApiSurface": [
+    "rustc - The Rust compiler",
+    "x.py - Bootstrap build script",
+    "library/core - Core library primitives",
+    "library/alloc - Allocation and collections",
+    "library/std - Standard library",
+    "library/proc_macro - Procedural macro support",
+    "compiler/rustc_driver - Compiler driver interface",
+    "compiler/rustc_ast - Abstract syntax tree",
+    "compiler/rustc_mir - Mid-level intermediate representation",
+    "compiler/rustc_codegen_llvm - LLVM code generation",
+    "src/tools/cargo - Package manager",
+    "src/tools/rustdoc - Documentation generator",
+    "src/tools/clippy - Linter",
+    "src/tools/rustfmt - Code formatter",
+    "src/tools/miri - MIR interpreter"
+  ]
+}
