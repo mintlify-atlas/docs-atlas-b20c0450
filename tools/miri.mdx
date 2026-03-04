@@ -1,0 +1,402 @@
+---
+title: Miri
+description: An interpreter for Rust MIR that detects undefined behavior
+---
+
+Miri is an experimental interpreter for Rust's Mid-level Intermediate Representation (MIR) that detects undefined behavior, memory errors, and concurrency issues in Rust programs.
+
+## Overview
+
+Miri executes Rust code at the MIR level and checks for various forms of undefined behavior that could lead to bugs or security vulnerabilities. It's an essential tool for testing unsafe code and ensuring soundness.
+
+<Warning>
+Miri **does not catch every violation** of the Rust specification. It uses its own approximation of undefined behavior and tests one of many possible executions of your program.
+</Warning>
+
+## What Miri Detects
+
+Miri can detect a wide range of undefined behaviors:
+
+<CardGroup cols={2}>
+  <Card title="Memory Safety" icon="memory">
+    - Out-of-bounds memory accesses
+    - Use-after-free
+    - Invalid use of uninitialized data
+    - Misaligned memory accesses
+  </Card>
+  
+  <Card title="Type Safety" icon="shield-check">
+    - Invalid enum discriminants
+    - Invalid bool values (not 0 or 1)
+    - Violation of type invariants
+    - Invalid references
+  </Card>
+  
+  <Card title="Concurrency" icon="arrows-split">
+    - Data races
+    - Weak memory effects
+    - Thread synchronization issues
+    - Atomic operation violations
+  </Card>
+  
+  <Card title="Intrinsic Safety" icon="code">
+    - `unreachable_unchecked` being reached
+    - `copy_nonoverlapping` with overlapping ranges
+    - Precondition violations
+    - Memory leaks
+  </Card>
+</CardGroup>
+
+### Experimental Features
+
+- **Stacked Borrows**: Aliasing rules for references
+- **Tree Borrows**: Alternative aliasing model
+
+## Installation
+
+<Steps>
+  <Step title="Install Rust nightly">
+    Miri requires the nightly toolchain:
+    
+    ```bash
+    rustup toolchain install nightly
+    ```
+  </Step>
+  
+  <Step title="Add Miri component">
+    ```bash
+    rustup +nightly component add miri
+    ```
+  </Step>
+  
+  <Step title="Setup Miri">
+    Perform initial setup (installs dependencies):
+    
+    ```bash
+    cargo +nightly miri setup
+    ```
+  </Step>
+  
+  <Step title="Run Miri">
+    ```bash
+    cargo +nightly miri test
+    cargo +nightly miri run
+    ```
+  </Step>
+</Steps>
+
+## Basic Usage
+
+### Running Tests
+
+```bash
+# Run all tests with Miri
+cargo miri test
+
+# Run specific test
+cargo miri test test_name
+
+# Run tests matching a filter
+cargo miri test filter
+```
+
+### Running Binaries
+
+```bash
+# Run the main binary
+cargo miri run
+
+# Run a specific binary
+cargo miri run --bin my_binary
+
+# Pass arguments to the program
+cargo miri run -- arg1 arg2
+```
+
+### Cross-Interpretation
+
+Run code for different target architectures:
+
+```bash
+# Run as Linux program (better support than Windows)
+cargo miri run --target x86_64-unknown-linux-gnu
+
+# Test on big-endian architecture
+cargo miri test --target s390x-unknown-linux-gnu
+
+# Test on different pointer width
+cargo miri test --target i686-unknown-linux-gnu
+```
+
+<Tip>
+Cross-interpretation is particularly useful for testing endian-sensitive code and platform-specific behavior without needing the actual hardware.
+</Tip>
+
+## Configuration Flags
+
+Miri provides extensive configuration through `-Z` flags set via `MIRIFLAGS`:
+
+### Common Flags
+
+```bash
+# Disable isolation (access host environment)
+MIRIFLAGS="-Zmiri-disable-isolation" cargo miri test
+
+# Ignore memory leaks
+MIRIFLAGS="-Zmiri-ignore-leaks" cargo miri run
+
+# Use a specific seed for determinism
+MIRIFLAGS="-Zmiri-seed=42" cargo miri test
+
+# Test multiple seeds
+MIRIFLAGS="-Zmiri-many-seeds=0..16" cargo miri test
+
+# Make concurrency fully deterministic
+MIRIFLAGS="-Zmiri-deterministic-concurrency" cargo miri test
+```
+
+### Environment Variable Forwarding
+
+```bash
+# Forward specific environment variable
+MIRIFLAGS="-Zmiri-env-forward=MY_VAR" cargo miri test
+
+# Set environment variable for the program
+MIRIFLAGS="-Zmiri-env-set=MY_VAR=value" cargo miri run
+```
+
+### Backtrace Configuration
+
+```bash
+# Get backtraces (requires disabling isolation)
+RUST_BACKTRACE=1 MIRIFLAGS="-Zmiri-disable-isolation" cargo miri test
+
+# Configure backtrace verbosity
+MIRIFLAGS="-Zmiri-backtrace=full" cargo miri run
+```
+
+## Testing Multiple Executions
+
+Miri can explore different execution paths:
+
+```bash
+# Test with 64 different seeds (default)
+MIRIFLAGS="-Zmiri-many-seeds" cargo miri test
+
+# Test with specific range of seeds
+MIRIFLAGS="-Zmiri-many-seeds=0..16" cargo miri test
+
+# Continue even after finding failures
+MIRIFLAGS="-Zmiri-many-seeds-keep-going" cargo miri test
+```
+
+<Note>
+Different seeds can reveal bugs that only occur under specific thread interleavings or memory layouts.
+</Note>
+
+## Building Miri from Source
+
+Miri is located at `src/tools/miri/` in the Rust repository.
+
+### Package Structure
+
+From `src/tools/miri/Cargo.toml`:
+
+```toml
+[package]
+name = "miri"
+version = "0.1.0"
+edition = "2024"
+description = "An experimental interpreter for Rust MIR (core driver)."
+
+[dependencies]
+getrandom = { version = "0.3", features = ["std"] }
+rand = "0.9"
+smallvec = { version = "1.7", features = ["drain_filter"] }
+aes = { version = "0.8.3", features = ["hazmat"] }
+measureme = "12"
+chrono = { version = "0.4.38", default-features = false }
+
+[features]
+default = ["stack-cache", "native-lib"]
+genmc = ["dep:genmc-sys"]
+stack-cache = []
+expensive-consistency-checks = ["stack-cache"]
+tracing = ["serde_json"]
+native-lib = ["dep:libffi", "dep:libloading", ...]
+```
+
+### Build with Bootstrap
+
+```bash
+# Build Miri
+./x build miri
+
+# Test Miri
+./x test miri
+
+# Build and install Miri
+./x install miri
+```
+
+## Miri Components
+
+Miri consists of several components:
+
+- **`miri`**: Core interpreter (main crate)
+- **`cargo-miri`**: Cargo integration tool
+- **`miri-script`**: Development and testing scripts
+- **`test-cargo-miri`**: Integration tests
+- **`bench-cargo-miri`**: Benchmarks under Miri
+
+## Ignoring Tests Under Miri
+
+Some tests may not work with Miri:
+
+```rust
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_requires_native_io() {
+    // This test uses features Miri doesn't support
+    std::fs::read("file.txt").unwrap();
+}
+
+// Or check at runtime
+#[test]
+fn conditional_test() {
+    if cfg!(miri) {
+        // Simplified version for Miri
+    } else {
+        // Full native test
+    }
+}
+```
+
+## Parallel Testing
+
+Miri is single-threaded, but you can parallelize test execution:
+
+```bash
+# Install cargo-nextest
+cargo install cargo-nextest
+
+# Run tests in parallel
+cargo miri nextest run -j8
+```
+
+<Warning>
+`cargo-nextest` runs each test in a separate process, so it won't detect data races between tests that share resources.
+</Warning>
+
+## CI Integration
+
+### GitHub Actions
+
+```yaml
+miri:
+  name: "Miri"
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - name: Install Miri
+      run: |
+        rustup toolchain install nightly --component miri
+        rustup override set nightly
+        cargo miri setup
+    - name: Test with Miri
+      run: cargo miri test
+```
+
+### Running on Different Targets
+
+```yaml
+- name: Test with Miri on multiple targets
+  run: |
+    cargo miri test --target x86_64-unknown-linux-gnu
+    cargo miri test --target s390x-unknown-linux-gnu
+```
+
+## Supported Targets
+
+Miri supports various targets with different levels of support:
+
+- **Tier 1**: All Rust Tier 1 targets fully supported
+- **Big-endian**: `s390x-unknown-linux-gnu` as the primary big-endian test target
+- **Linux/macOS/Windows**: Generally work, with Linux having the best support
+- **Solaris/illumos**: Unofficial support (maintained by @devnexen)
+- **FreeBSD**: Unofficial support (maintained by @YohDeadfall and @LorrensP-2158466)
+- **Android**: Unofficial support (maintainer wanted)
+
+<Tip>
+When testing on Windows, consider using `--target x86_64-unknown-linux-gnu` for better API support.
+</Tip>
+
+## Advanced Configuration
+
+### Aliasing Models
+
+```bash
+# Disable Stacked Borrows
+MIRIFLAGS="-Zmiri-disable-stacked-borrows" cargo miri test
+
+# Use Tree Borrows instead
+MIRIFLAGS="-Zmiri-tree-borrows" cargo miri test
+
+# Track pointer tags for debugging
+MIRIFLAGS="-Zmiri-track-pointer-tag=123" cargo miri run
+```
+
+### Memory and Performance
+
+```bash
+# Track specific allocations
+MIRIFLAGS="-Zmiri-track-alloc-id=42,43" cargo miri test
+
+# Control preemption rate
+MIRIFLAGS="-Zmiri-preemption-rate=0.1" cargo miri test
+
+# Report progress for long-running programs
+MIRIFLAGS="-Zmiri-report-progress" cargo miri run
+```
+
+### Numeric Precision
+
+```bash
+# Make floating-point fully deterministic
+MIRIFLAGS="-Zmiri-deterministic-floats" cargo miri test
+
+# Disable extra rounding errors
+MIRIFLAGS="-Zmiri-no-extra-rounding-error" cargo miri test
+```
+
+## Known Limitations
+
+<Warning>
+Miri has several important limitations:
+
+- Platform-independent interpreter - limited FFI and platform API support
+- Tests one execution path - may miss bugs in other paths
+- Non-deterministic behavior - results may vary with different seeds
+- Performance - much slower than native execution
+- Not all system APIs supported - especially networking
+</Warning>
+
+## Real-World Bugs Found
+
+Miri has discovered numerous bugs in production code:
+
+- Memory leaks in `Vec` and `BTreeMap`
+- Unaligned accesses in `rand` and `encoding_rs`
+- Data races in `arc-swap` and `thread::scope`
+- Use-after-free in `servo_arc`
+- Invalid pointer arithmetic in TiKV
+
+See the [full list](https://github.com/rust-lang/miri#bugs-found-by-miri) in the Miri README.
+
+## Resources
+
+- **GitHub Repository**: [github.com/rust-lang/miri](https://github.com/rust-lang/miri)
+- **Zulip Channel**: [Miri stream](https://rust-lang.zulipchat.com/#narrow/stream/269128-miri)
+- **Contributing Guide**: `CONTRIBUTING.md` in the Miri repository
+- **Source Code**: `src/tools/miri/` in the Rust repository
+- **Research Papers**: Multiple academic papers on Stacked Borrows, Tree Borrows, and Miri itself

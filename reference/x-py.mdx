@@ -1,0 +1,690 @@
+---
+title: x.py Build Script Reference
+description: Complete command reference for the x.py build script used to compile and test the Rust compiler
+---
+
+## Overview
+
+x.py is the main entry point for building, testing, and developing the Rust compiler. It's a cross-platform script that bootstraps the build system and provides a consistent interface across all platforms.
+
+## Entry Points
+
+<CardGroup cols={3}>
+  <Card title="x (Unix)" icon="linux">
+    Shell script for Unix-like systems (Linux, macOS, BSD)
+  </Card>
+  
+  <Card title="x.ps1 (Windows)" icon="windows">
+    PowerShell script for Windows systems
+  </Card>
+  
+  <Card title="x.py (Cross-platform)" icon="python">
+    Python script that works on all platforms
+  </Card>
+</CardGroup>
+
+<Note>
+  All three entry points provide identical functionality. Use the one most convenient for your platform.
+</Note>
+
+## Quick Start
+
+```bash
+# Build the compiler and standard library (stage 1)
+./x.py build --stage 1
+
+# Run tests
+./x.py test
+
+# Build documentation
+./x.py doc
+
+# Install locally
+./x.py install
+```
+
+## Subcommands
+
+### build
+
+Compile the compiler, libraries, or specific components.
+
+```bash
+./x.py build [OPTIONS] [PATHS...]
+```
+
+<ParamField path="--stage" type="number" default="1">
+  Stage to build (0, 1, or 2). Each stage uses the previous stage's compiler.
+</ParamField>
+
+<ParamField path="--timings" type="flag">
+  Pass `--timings` to Cargo to generate build timing information.
+</ParamField>
+
+<ParamField path="-j, --jobs" type="number">
+  Number of parallel jobs to run. Defaults to number of CPU cores.
+</ParamField>
+
+**Examples:**
+
+<CodeGroup>
+
+```bash Quick Compiler Build
+# Build stage 1 compiler and standard library
+./x.py build --stage 1 library/std
+
+# Results in: build/$ARCH/stage1/bin/rustc
+```
+
+```bash Full Build
+# Build everything (stage 2 compiler)
+./x.py build
+
+# Equivalent to:
+./x.py build --stage 2
+```
+
+```bash Specific Components
+# Build only the standard library
+./x.py build library/std
+
+# Build compiler without stdlib
+./x.py build compiler/rustc
+
+# Build with timing information
+./x.py build --timings
+```
+
+</CodeGroup>
+
+### check
+
+Quickly check code for errors without producing binaries.
+
+```bash
+./x.py check [OPTIONS] [PATHS...]
+```
+
+<ParamField path="--all-targets" type="flag">
+  Check all targets (lib, bin, tests, examples, benches).
+</ParamField>
+
+**Examples:**
+
+```bash
+# Check the standard library
+./x.py check library/std
+
+# Check compiler for errors
+./x.py check compiler/rustc
+
+# Check everything
+./x.py check --all-targets
+```
+
+<Info>
+  `check` is much faster than `build` since it doesn't generate code. Use it for quick validation during development.
+</Info>
+
+### clippy
+
+Run Clippy linter on Rust code.
+
+```bash
+./x.py clippy [OPTIONS] [PATHS...]
+```
+
+<ParamField path="--fix" type="flag">
+  Automatically apply Clippy suggestions.
+</ParamField>
+
+<ParamField path="--allow-dirty" type="flag">
+  Allow fixing even with uncommitted changes (requires `--fix`).
+</ParamField>
+
+<ParamField path="--allow-staged" type="flag">
+  Allow fixing even with staged changes (requires `--fix`).
+</ParamField>
+
+<ParamField path="-A, --allow" type="string[]">
+  Clippy lints to allow.
+</ParamField>
+
+<ParamField path="-D, --deny" type="string[]">
+  Clippy lints to deny.
+</ParamField>
+
+<ParamField path="-W, --warn" type="string[]">
+  Clippy lints to warn on.
+</ParamField>
+
+**Examples:**
+
+```bash
+# Run clippy on standard library
+./x.py clippy library/core
+
+# Auto-fix issues
+./x.py clippy library/std --fix
+
+# Deny specific lints
+./x.py clippy -D clippy::unwrap_used
+```
+
+### test
+
+Run test suites.
+
+```bash
+./x.py test [OPTIONS] [PATHS...]
+```
+
+<ParamField path="--stage" type="number" default="1">
+  Stage to test. Note that `test --stage N` uses the stage N-1 compiler.
+</ParamField>
+
+<ParamField path="--test-args" type="string">
+  Arguments to pass to the test runner (libtest, compiletest, or rustdoc).
+</ParamField>
+
+<ParamField path="--no-fail-fast" type="flag">
+  Run all tests regardless of failures.
+</ParamField>
+
+<ParamField path="--bless" type="flag">
+  Automatically update expected test outputs (for UI tests).
+</ParamField>
+
+<ParamField path="--no-doc" type="flag">
+  Skip documentation tests.
+</ParamField>
+
+<ParamField path="--doc" type="flag">
+  Run only documentation tests.
+</ParamField>
+
+<ParamField path="--compare-mode" type="string">
+  Mode for comparing UI test output (e.g., "next-solver").
+</ParamField>
+
+<ParamField path="--pass" type="check | build | run">
+  Force check/build/run-pass tests to this mode.
+</ParamField>
+
+**Examples:**
+
+<CodeGroup>
+
+```bash Run Specific Tests
+# Run UI tests
+./x.py test tests/ui
+
+# Run standard library tests
+./x.py test library/std
+
+# Run specific test with filter
+./x.py test library/std --test-args hash_map
+```
+
+```bash Update Test Expectations
+# Bless UI test outputs
+./x.py test tests/ui --bless
+
+# Test with specific compare mode
+./x.py test tests/ui --compare-mode next-solver
+```
+
+```bash Test Tools
+# Run tidy checks
+./x.py test tidy
+
+# Run rustdoc tests
+./x.py test rustdoc
+```
+
+</CodeGroup>
+
+<Warning>
+  `./x.py test --stage N` does NOT test the stage N compiler. It uses the stage N-1 compiler to test stage N artifacts.
+</Warning>
+
+### doc
+
+Build documentation.
+
+```bash
+./x.py doc [OPTIONS] [PATHS...]
+```
+
+<ParamField path="--open" type="flag">
+  Open the documentation in a browser after building.
+</ParamField>
+
+<ParamField path="--json" type="flag">
+  Generate JSON format documentation in addition to HTML.
+</ParamField>
+
+**Examples:**
+
+```bash
+# Build and open std docs
+./x.py doc library/std --open
+
+# Build all documentation
+./x.py doc
+
+# Build compiler docs
+./x.py doc compiler
+
+# Build with JSON output
+./x.py doc library/std --json
+```
+
+### fmt
+
+Format code using rustfmt.
+
+```bash
+./x.py fmt [OPTIONS]
+```
+
+<ParamField path="--check" type="flag">
+  Check if code is formatted without applying changes.
+</ParamField>
+
+<ParamField path="--all" type="flag">
+  Format all files, not just modified ones.
+</ParamField>
+
+**Examples:**
+
+```bash
+# Format modified files
+./x.py fmt
+
+# Check formatting
+./x.py fmt --check
+
+# Format all files
+./x.py fmt --all
+```
+
+### clean
+
+Remove build artifacts.
+
+```bash
+./x.py clean [OPTIONS]
+```
+
+<ParamField path="--all" type="flag">
+  Clean entire build directory.
+</ParamField>
+
+<ParamField path="--stage" type="number">
+  Clean specific stage without touching other artifacts.
+</ParamField>
+
+**Examples:**
+
+```bash
+# Clean stage 2
+./x.py clean --stage 2
+
+# Clean everything
+./x.py clean --all
+```
+
+### dist
+
+Build distribution artifacts (tarballs).
+
+```bash
+./x.py dist [PATHS...]
+```
+
+**Examples:**
+
+```bash
+# Create distribution tarballs
+./x.py dist
+
+# Distribute specific components
+./x.py dist rustc rust-std
+```
+
+### install
+
+Install built artifacts to a prefix.
+
+```bash
+./x.py install [PATHS...]
+```
+
+**Examples:**
+
+```bash
+# Install to default prefix (/usr/local)
+./x.py install
+
+# Install specific components
+./x.py install library/std cargo
+```
+
+### run
+
+Run tools from the repository.
+
+```bash
+./x.py run [OPTIONS] <TOOL> -- [ARGS...]
+```
+
+<ParamField path="--args" type="string[]">
+  Arguments to pass to the tool.
+</ParamField>
+
+**Examples:**
+
+```bash
+# Run bump-stage0 tool
+./x.py run src/tools/bump-stage0
+
+# Run with arguments
+./x.py run src/tools/tidy -- --help
+```
+
+### setup
+
+Interactive setup for development environment.
+
+```bash
+./x.py setup [PROFILE]
+```
+
+<ParamField path="PROFILE" type="library | compiler | tools | dist | none">
+  Development profile to configure.
+</ParamField>
+
+**Profiles:**
+
+<Accordion title="library">
+  For standard library development:
+  - Downloads CI-built LLVM and rustc
+  - Minimal build configuration
+  - Fast iteration on stdlib changes
+</Accordion>
+
+<Accordion title="compiler">
+  For compiler development:
+  - Downloads CI-built LLVM
+  - Builds rustc from source
+  - Optimized for compiler changes
+</Accordion>
+
+<Accordion title="tools">
+  For tool development (cargo, rustfmt, etc.):
+  - Downloads CI-built compiler
+  - Minimal configuration
+</Accordion>
+
+<Accordion title="dist">
+  For building distributions:
+  - Builds everything from source
+  - Full optimization
+  - Used for releases
+</Accordion>
+
+**Examples:**
+
+```bash
+# Interactive setup
+./x.py setup
+
+# Setup for compiler development
+./x.py setup compiler
+
+# Setup git hooks
+./x.py setup hook
+```
+
+### vendor
+
+Vendor Rust dependencies.
+
+```bash
+./x.py vendor [OPTIONS]
+```
+
+<ParamField path="--sync" type="path[]">
+  Additional Cargo.toml files to sync and vendor.
+</ParamField>
+
+<ParamField path="--versioned-dirs" type="flag">
+  Always include version in subdirectory names.
+</ParamField>
+
+**Examples:**
+
+```bash
+# Vendor all dependencies
+./x.py vendor
+
+# Vendor with additional manifests
+./x.py vendor --sync path/to/Cargo.toml
+```
+
+## Global Options
+
+These options work with all subcommands:
+
+<ParamField path="--config" type="path">
+  Path to bootstrap.toml configuration file.
+</ParamField>
+
+<ParamField path="--build-dir" type="path">
+  Build directory (overrides config).
+</ParamField>
+
+<ParamField path="--build" type="triple">
+  Build target triple.
+</ParamField>
+
+<ParamField path="--host" type="triple[]">
+  Host target triples.
+</ParamField>
+
+<ParamField path="--target" type="triple[]">
+  Target triples to build for.
+</ParamField>
+
+<ParamField path="--exclude" type="path[]">
+  Paths to exclude from build.
+</ParamField>
+
+<ParamField path="--skip" type="path[]">
+  Paths to skip.
+</ParamField>
+
+<ParamField path="--include-default-paths" type="flag">
+  Include default paths in addition to specified ones.
+</ParamField>
+
+<ParamField path="-v, --verbose" type="flag">
+  Verbose output. Use multiple times for more verbosity (-vv, -vvv).
+</ParamField>
+
+<ParamField path="-i, --incremental" type="flag">
+  Use incremental compilation.
+</ParamField>
+
+<ParamField path="--dry-run" type="flag">
+  Show what would be built without actually building.
+</ParamField>
+
+<ParamField path="--keep-stage" type="number[]">
+  Stages to keep without recompiling.
+</ParamField>
+
+<ParamField path="--keep-stage-std" type="number[]">
+  Standard library stages to keep without recompiling.
+</ParamField>
+
+<ParamField path="--color" type="auto | always | never">
+  Control color output.
+</ParamField>
+
+<ParamField path="--warnings" type="deny | warn | default">
+  How to handle warnings.
+</ParamField>
+
+<ParamField path="--json-output" type="flag">
+  Use JSON message format.
+</ParamField>
+
+<ParamField path="--on-fail" type="command">
+  Command to run on failure.
+</ParamField>
+
+<ParamField path="--set" type="key=value">
+  Override bootstrap.toml options (e.g., `--set rust.debug=true`).
+</ParamField>
+
+## Common Workflows
+
+### Quick Development Iteration
+
+```bash
+# Initial setup
+./x.py setup compiler
+
+# Make changes to compiler
+vim compiler/rustc_something/src/lib.rs
+
+# Quick check
+./x.py check compiler/rustc
+
+# Full build (only if needed)
+./x.py build --stage 1 --keep-stage 0
+
+# Test changes
+./x.py test tests/ui --stage 1
+```
+
+### Working on Standard Library
+
+```bash
+# Setup for library development
+./x.py setup library
+
+# Edit std
+vim library/std/src/collections/hash/map.rs
+
+# Test specific module
+./x.py test library/std --test-args collections::hash
+
+# Build docs
+./x.py doc library/std --open
+```
+
+### Running Benchmarks
+
+```bash
+# Build optimized compiler
+./x.py build --stage 2
+
+# Run benchmarks
+./x.py bench library/std
+```
+
+### Cross-Compilation
+
+```bash
+# Build for specific target
+./x.py build --target wasm32-wasip1
+
+# Test cross-compiled artifacts
+./x.py test --target aarch64-unknown-linux-gnu
+```
+
+## Performance Tips
+
+<AccordionGroup>
+  <Accordion title="Use --keep-stage">
+    Prevent recompilation of unchanged stages:
+    
+    ```bash
+    ./x.py build --keep-stage 0 --keep-stage 1
+    ```
+  </Accordion>
+  
+  <Accordion title="Download CI Artifacts">
+    Configure in bootstrap.toml:
+    
+    ```toml
+    [llvm]
+    download-ci-llvm = true
+    
+    [rust]
+    download-rustc = "if-unchanged"
+    ```
+  </Accordion>
+  
+  <Accordion title="Use check Instead of build">
+    For quick validation:
+    
+    ```bash
+    ./x.py check compiler/rustc
+    ```
+  </Accordion>
+  
+  <Accordion title="Limit Parallel Jobs on Low Memory">
+    Prevent OOM errors:
+    
+    ```bash
+    ./x.py build -j 4
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Build Failures
+
+```bash
+# Clean and rebuild
+./x.py clean --stage 2
+./x.py build --stage 2
+
+# Very verbose output
+./x.py build -vvv
+```
+
+### Python Version Issues
+
+```bash
+# Force Python 3
+export PYTHON=python3
+./x.py build
+```
+
+### Submodule Issues
+
+```bash
+# Update submodules
+git submodule update --init --recursive
+
+# Or let bootstrap handle it
+./x.py build  # Will update submodules automatically
+```
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Bootstrap System" icon="gears" href="/reference/bootstrap">
+    Learn about the bootstrap architecture
+  </Card>
+  
+  <Card title="Configuration Options" icon="sliders" href="/reference/configuration-options">
+    Explore bootstrap.toml settings
+  </Card>
+</CardGroup>

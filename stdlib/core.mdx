@@ -1,0 +1,292 @@
+---
+title: Core Library
+description: The dependency-free foundation of the Rust Standard Library providing intrinsic and primitive building blocks
+---
+
+The Rust Core Library is the dependency-free foundation of the Rust Standard Library. It is the portable glue between the language and its libraries, defining the intrinsic and primitive building blocks of all Rust code.
+
+<Note>
+The core library links to no upstream libraries, no system libraries, and no libc. It is platform-agnostic and minimal by design.
+</Note>
+
+## Overview
+
+The core library is **minimal**: it isn't even aware of heap allocation, nor does it provide concurrency or I/O. These things require platform integration, and this library is platform-agnostic.
+
+### Key Characteristics
+
+- **No dependencies**: Links to no external libraries
+- **Platform-agnostic**: Works across all Rust targets
+- **Minimal footprint**: Contains only essential primitives
+- **No allocation**: Doesn't require heap allocation
+- **No I/O**: No input/output operations
+
+## Core Modules
+
+### Language Traits
+
+<CardGroup cols={2}>
+  <Card title="borrow" icon="arrow-right-arrow-left">
+    Borrowing and ownership traits
+  </Card>
+  <Card title="clone" icon="copy">
+    The Clone trait for explicit duplication
+  </Card>
+  <Card title="cmp" icon="equals">
+    Comparison traits: Eq, PartialEq, Ord, PartialOrd
+  </Card>
+  <Card title="convert" icon="arrows-rotate">
+    Traits for type conversions: From, Into, TryFrom, TryInto
+  </Card>
+  <Card title="default" icon="circle-dot">
+    The Default trait for default values
+  </Card>
+  <Card title="marker" icon="bookmark">
+    Marker traits: Send, Sync, Copy, Sized
+  </Card>
+  <Card title="ops" icon="function">
+    Operator overloading traits
+  </Card>
+  <Card title="error" icon="triangle-exclamation">
+    The Error trait for error handling
+  </Card>
+</CardGroup>
+
+### Core Types and Primitives
+
+<CardGroup cols={2}>
+  <Card title="option" icon="question">
+    Optional values with Option&lt;T&gt;
+  </Card>
+  <Card title="result" icon="check">
+    Error handling with Result&lt;T, E&gt;
+  </Card>
+  <Card title="array" icon="grid">
+    Fixed-size arrays
+  </Card>
+  <Card title="slice" icon="bars">
+    Dynamically-sized views into contiguous sequences
+  </Card>
+  <Card title="str" icon="font">
+    UTF-8 string slices
+  </Card>
+  <Card title="char" icon="a">
+    Unicode scalar values
+  </Card>
+</CardGroup>
+
+### Memory and Ownership
+
+<Accordion title="mem - Memory manipulation">
+Core memory functions for working with values:
+- `size_of`, `size_of_val` - Size queries
+- `swap`, `replace` - Value manipulation
+- `drop` - Explicit destructor calls
+- `forget` - Prevent destructors from running
+</Accordion>
+
+<Accordion title="ptr - Raw pointer manipulation">
+Low-level pointer operations:
+- `copy`, `copy_nonoverlapping` - Memory copying
+- `write`, `read` - Pointer dereferencing
+- `null`, `null_mut` - Null pointer creation
+- Alignment and offset operations
+</Accordion>
+
+<Accordion title="cell - Interior mutability">
+Types for interior mutability patterns:
+- `Cell<T>` - Shared mutable containers
+- `RefCell<T>` - Runtime-checked borrowing
+- `UnsafeCell<T>` - Core primitive for interior mutability
+</Accordion>
+
+<Accordion title="pin - Pinning API">
+Types for pinning data in memory:
+- `Pin<P>` - Pointer type that guarantees the pointed-to value won't move
+- Essential for async/await and self-referential structures
+</Accordion>
+
+### Iteration
+
+<CardGroup cols={2}>
+  <Card title="iter" icon="arrows-repeat">
+    Iterator traits and adaptors
+  </Card>
+  <Card title="async_iter" icon="clock">
+    Async iteration (unstable)
+  </Card>
+</CardGroup>
+
+### Numeric Types
+
+<Accordion title="Integer types">
+Signed and unsigned integers:
+- `i8`, `i16`, `i32`, `i64`, `i128`, `isize`
+- `u8`, `u16`, `u32`, `u64`, `u128`, `usize`
+
+Each type provides methods for:
+- Checked arithmetic
+- Saturating arithmetic
+- Wrapping arithmetic
+- Bit manipulation
+</Accordion>
+
+<Accordion title="Floating-point types">
+Floating-point numbers:
+- `f16` - 16-bit floating point
+- `f32` - 32-bit floating point
+- `f64` - 64-bit floating point
+- `f128` - 128-bit floating point
+
+Includes mathematical functions like `sqrt`, `sin`, `cos`, etc.
+</Accordion>
+
+### Formatting and Display
+
+<Accordion title="fmt - Formatting infrastructure">
+Core formatting traits:
+- `Display` - User-facing output
+- `Debug` - Programmer-facing output
+- `Binary`, `Octal`, `Hex` - Numeric formatting
+- Used by `println!`, `format!`, etc.
+</Accordion>
+
+### Async and Concurrency
+
+<CardGroup cols={2}>
+  <Card title="future" icon="clock">
+    Asynchronous values with Future trait
+  </Card>
+  <Card title="task" icon="list-check">
+    Task management for async execution
+  </Card>
+  <Card title="sync" icon="lock">
+    Atomic types and memory ordering
+  </Card>
+</CardGroup>
+
+### Other Core Functionality
+
+<CardGroup cols={3}>
+  <Card title="any" icon="fingerprint">
+    Runtime type information
+  </Card>
+  <Card title="hash" icon="hashtag">
+    Hashing traits
+  </Card>
+  <Card title="hint" icon="lightbulb">
+    Compiler hints
+  </Card>
+  <Card title="intrinsics" icon="microchip">
+    Compiler intrinsics
+  </Card>
+  <Card title="panic" icon="bell">
+    Panic support
+  </Card>
+  <Card title="time" icon="stopwatch">
+    Duration type
+  </Card>
+</CardGroup>
+
+## Architecture Support
+
+<Note>
+The `arch` module provides platform-specific intrinsics and SIMD operations for various architectures including x86, ARM, RISC-V, and more.
+</Note>
+
+### SIMD Support
+
+The `simd` module provides portable SIMD (Single Instruction, Multiple Data) operations:
+
+```rust
+use core::simd::*;
+
+let a = f32x4::from_array([1.0, 2.0, 3.0, 4.0]);
+let b = f32x4::from_array([5.0, 6.0, 7.0, 8.0]);
+let sum = a + b;
+```
+
+## Usage Requirements
+
+The core library is built on the assumption of a few existing symbols:
+
+<Accordion title="Required memory routines">
+- `memcpy`, `memmove`, `memset`, `memcmp`, `bcmp`, `strlen`
+- These are core memory routines generated by Rust codegen backends
+- Often provided by system libc or compiler-builtins crate
+</Accordion>
+
+<Accordion title="Panic handler">
+You must define a panic handler using `#[panic_handler]`:
+
+```rust
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
+```
+
+Required for `#![no_std]` environments.
+</Accordion>
+
+<Accordion title="Exception personality (optional)">
+`rust_eh_personality` is used by failure mechanisms. Often mapped to GCC's personality function. Only called during unwinding.
+</Accordion>
+
+## Common Patterns
+
+### Option and Result
+
+```rust
+// Option for nullable values
+fn divide(numerator: f64, denominator: f64) -> Option<f64> {
+    if denominator == 0.0 {
+        None
+    } else {
+        Some(numerator / denominator)
+    }
+}
+
+// Result for error handling
+fn parse_version(s: &str) -> Result<u32, ParseError> {
+    s.parse().map_err(|_| ParseError)
+}
+```
+
+### Iterator Usage
+
+```rust
+let numbers = [1, 2, 3, 4, 5];
+let sum: i32 = numbers.iter()
+    .filter(|&&x| x % 2 == 0)
+    .map(|&x| x * 2)
+    .sum();
+```
+
+### Interior Mutability
+
+```rust
+use core::cell::Cell;
+
+struct Counter {
+    count: Cell<u32>,
+}
+
+impl Counter {
+    fn increment(&self) {
+        self.count.set(self.count.get() + 1);
+    }
+}
+```
+
+## Stability
+
+<Note>
+The core library has been stable since Rust 1.6.0. It forms the immutable foundation of the Rust language and maintains strict backward compatibility.
+</Note>
+
+## Related Libraries
+
+- **alloc** - Provides heap allocation primitives
+- **std** - Full standard library built on core and alloc
+- **proc_macro** - Procedural macro support

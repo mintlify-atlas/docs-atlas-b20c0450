@@ -1,0 +1,186 @@
+---
+title: Compiler Overview
+description: Architecture and design of the Rust compiler (rustc)
+---
+
+The Rust compiler (rustc) is a sophisticated multi-phase compiler that transforms Rust source code into executable binaries. The compiler is built as a collection of specialized crates, each responsible for different aspects of the compilation pipeline.
+
+## Compiler Entry Point
+
+The compiler's entry point is straightforward:
+
+```rust
+fn main() -> ExitCode {
+    rustc_driver::main()
+}
+```
+
+This delegates to `rustc_driver_impl`, which orchestrates the entire compilation process.
+
+<Note>
+The `rustc_driver_impl` crate is effectively the "main" function for the Rust compiler. It orchestrates the compilation process and "knits together" the code from other crates, but doesn't contain the core compiler logic itself.
+</Note>
+
+## Compilation Phases
+
+The Rust compiler processes code through several distinct phases:
+
+<Steps>
+  <Step title="Parsing">
+    Lexical analysis and syntax parsing transform source code into an Abstract Syntax Tree (AST). The `rustc_parse` and `rustc_ast` crates handle this phase.
+  </Step>
+  
+  <Step title="Expansion">
+    Macro expansion, name resolution, and HIR lowering. The compiler expands all macros and resolves names to their definitions.
+  </Step>
+  
+  <Step title="Analysis">
+    Type checking, borrow checking, and trait resolution occur on the High-level Intermediate Representation (HIR). The `rustc_hir_analysis` and `rustc_borrowck` crates perform these checks.
+  </Step>
+  
+  <Step title="MIR Construction">
+    The HIR is lowered to Mid-level Intermediate Representation (MIR), which is used for optimization and code generation.
+  </Step>
+  
+  <Step title="Optimization">
+    Various MIR passes optimize the code through techniques like inlining, constant propagation, and dead code elimination.
+  </Step>
+  
+  <Step title="Code Generation">
+    MIR is translated to LLVM IR (or other backend representations), which is then compiled to machine code.
+  </Step>
+</Steps>
+
+## Key Compiler Crates
+
+### Frontend Crates
+
+<Accordion title="rustc_lexer">
+  Low-level lexical analysis. Tokenizes source code into a stream of tokens.
+</Accordion>
+
+<Accordion title="rustc_parse">
+  The main parser interface. Creates parsers from source files or strings and handles the parsing process.
+</Accordion>
+
+<Accordion title="rustc_ast">
+  Contains the Abstract Syntax Tree definitions, token types, and AST manipulation utilities.
+</Accordion>
+
+<Accordion title="rustc_expand">
+  Handles macro expansion, including both declarative and procedural macros.
+</Accordion>
+
+### Middle-End Crates
+
+<Accordion title="rustc_hir">
+  Defines the High-level Intermediate Representation, a desugared and resolved version of the AST.
+</Accordion>
+
+<Accordion title="rustc_middle">
+  Central hub containing type definitions, the type context (`TyCtxt`), and query infrastructure.
+</Accordion>
+
+<Accordion title="rustc_mir_build">
+  Constructs MIR from HIR. Responsible for lowering high-level constructs to MIR.
+</Accordion>
+
+<Accordion title="rustc_mir_transform">
+  Contains all MIR optimization passes and transformations.
+</Accordion>
+
+### Backend Crates
+
+<Accordion title="rustc_codegen_ssa">
+  Backend-agnostic code generation infrastructure. Defines traits and common functionality for all codegen backends.
+</Accordion>
+
+<Accordion title="rustc_codegen_llvm">
+  LLVM backend implementation. Translates MIR to LLVM IR and manages LLVM compilation.
+</Accordion>
+
+## Compiler Callbacks
+
+The compiler provides hooks for external tools to observe and modify compilation:
+
+```rust
+pub trait Callbacks {
+    /// Called before creating the compiler instance
+    fn config(&mut self, _config: &mut interface::Config) {}
+    
+    /// Called after parsing the crate root
+    fn after_crate_root_parsing(
+        &mut self,
+        _compiler: &interface::Compiler,
+        _krate: &mut ast::Crate,
+    ) -> Compilation {
+        Compilation::Continue
+    }
+    
+    /// Called after expansion
+    fn after_expansion<'tcx>(
+        &mut self,
+        _compiler: &interface::Compiler,
+        _tcx: TyCtxt<'tcx>,
+    ) -> Compilation {
+        Compilation::Continue
+    }
+    
+    /// Called after analysis
+    fn after_analysis<'tcx>(
+        &mut self,
+        _compiler: &interface::Compiler,
+        _tcx: TyCtxt<'tcx>,
+    ) -> Compilation {
+        Compilation::Continue
+    }
+}
+```
+
+<Info>
+These callbacks enable tools like Clippy, rust-analyzer, and custom compiler plugins to hook into the compilation process at specific points.
+</Info>
+
+## Query System
+
+The compiler uses a demand-driven query system for incremental compilation:
+
+- Queries are memoized computations that form the compiler's architecture
+- Results are cached and dependencies are tracked for incremental recompilation
+- The query system is defined in `rustc_middle` and implemented in `rustc_query_impl`
+
+## Memory Management
+
+<Note>
+The compiler uses arena allocation extensively for performance:
+
+- The `rustc_arena` crate provides efficient memory allocation
+- Most compiler data structures are allocated in arenas and have the same lifetime
+- This eliminates the need for individual deallocations and improves cache locality
+</Note>
+
+## Error Handling
+
+The `rustc_errors` crate provides comprehensive error reporting:
+
+- Rich diagnostic messages with source code snippets
+- Structured error codes (e.g., E0308 for type mismatches)
+- Multiple output formats (JSON, terminal, etc.)
+- Suggestions for fixing errors
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Frontend" href="/compiler/frontend">
+    Learn about parsing and AST construction
+  </Card>
+  <Card title="MIR" href="/compiler/mir">
+    Explore the Mid-level Intermediate Representation
+  </Card>
+  <Card title="Code Generation" href="/compiler/codegen">
+    Understand how MIR becomes machine code
+  </Card>
+  <Card title="Incremental Compilation" href="/compiler/incremental">
+    See how the compiler optimizes rebuild times
+  </Card>
+</CardGroup>

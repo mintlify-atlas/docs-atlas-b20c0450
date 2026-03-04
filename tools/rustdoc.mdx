@@ -1,0 +1,279 @@
+---
+title: Rustdoc
+description: Rust's documentation generator
+---
+
+Rustdoc is Rust's built-in documentation generator that creates HTML documentation from Rust source code and specially-formatted comments.
+
+## Overview
+
+Rustdoc extracts documentation comments from Rust code and generates comprehensive, searchable HTML documentation. It's the tool behind all the documentation you see at [docs.rs](https://docs.rs) and the [standard library documentation](https://doc.rust-lang.org/std/).
+
+<Note>
+Rustdoc is tightly integrated with the Rust compiler and shares much of its infrastructure, located in `src/librustdoc/` and the tool wrapper in `src/tools/rustdoc/`.
+</Note>
+
+## Architecture
+
+Rustdoc consists of two main components:
+
+### 1. The Library (`librustdoc`)
+
+Located at `src/librustdoc/`, this contains the core documentation generation logic:
+
+- **AST Processing**: Analyzes Rust code structure
+- **Markdown Rendering**: Converts doc comments to HTML
+- **HTML Generation**: Creates styled, interactive documentation pages
+- **Search Index**: Builds JavaScript search functionality
+
+### 2. The Tool Binary
+
+The thin wrapper in `src/tools/rustdoc/` provides the command-line interface:
+
+```rust:src/tools/rustdoc/main.rs
+#![feature(rustc_private)]
+
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    rustdoc::main()
+}
+```
+
+## Building Rustdoc
+
+Rustdoc is built as part of the Rust compiler toolchain:
+
+<Steps>
+  <Step title="Build the compiler">
+    Rustdoc requires `rustc_private` features, so it depends on the compiler being built first.
+    
+    ```bash
+    ./x build --stage 1 compiler
+    ```
+  </Step>
+  
+  <Step title="Build rustdoc">
+    Build the rustdoc tool itself.
+    
+    ```bash
+    ./x build rustdoc
+    ```
+  </Step>
+  
+  <Step title="Test rustdoc">
+    Run the comprehensive test suite.
+    
+    ```bash
+    ./x test rustdoc
+    ```
+  </Step>
+</Steps>
+
+### Package Configuration
+
+From `src/tools/rustdoc/Cargo.toml`:
+
+```toml
+[package]
+name = "rustdoc-tool"
+version = "0.0.0"
+edition = "2024"
+
+# The binary is named differently to avoid conflicts
+[[bin]]
+name = "rustdoc_tool_binary"
+path = "main.rs"
+
+[dependencies]
+rustdoc = { path = "../../librustdoc" }
+
+[features]
+jemalloc = ['rustdoc/jemalloc']
+```
+
+## Documentation Comments
+
+Rustdoc processes several types of documentation comments:
+
+### Item Documentation
+
+```rust
+/// This is a doc comment for the following item.
+/// It supports **Markdown** formatting.
+///
+/// # Examples
+///
+/// ```
+/// let x = my_function(5);
+/// assert_eq!(x, 10);
+/// ```
+pub fn my_function(n: i32) -> i32 {
+    n * 2
+}
+```
+
+### Module Documentation
+
+```rust
+//! This is a doc comment for the containing module.
+//! It appears at the top of module documentation.
+
+// Regular code follows...
+```
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Automatic Links" icon="link">
+    Rustdoc automatically generates links between types and functions.
+    
+    ```rust
+    /// See [`String`] and [`Vec`] for details.
+    ```
+  </Card>
+  
+  <Card title="Doc Tests" icon="vial">
+    Code blocks in documentation are automatically tested.
+    
+    ```rust
+    /// ```
+    /// assert_eq!(2 + 2, 4);
+    /// ```
+    ```
+  </Card>
+  
+  <Card title="Search" icon="magnifying-glass">
+    Generates a JavaScript-based search index for fast lookup.
+  </Card>
+  
+  <Card title="Source Links" icon="code">
+    Links to source code for each documented item.
+  </Card>
+</CardGroup>
+
+## Usage
+
+### Basic Documentation Generation
+
+```bash
+# Generate documentation for your package
+cargo doc
+
+# Generate and open in browser
+cargo doc --open
+
+# Include private items
+cargo doc --document-private-items
+```
+
+### Command-Line Options
+
+```bash
+# Generate docs for a specific crate
+rustdoc src/lib.rs
+
+# With custom output directory
+rustdoc src/lib.rs --out-dir ./docs
+
+# Generate JSON output
+rustdoc src/lib.rs --output-format json
+```
+
+## Advanced Features
+
+### Cross-Crate Documentation
+
+Rustdoc can link to documentation from dependencies:
+
+```bash
+cargo doc --no-deps  # Only document this crate
+cargo doc            # Document with dependencies
+```
+
+### Documentation Attributes
+
+Control documentation generation with attributes:
+
+```rust
+#[doc(hidden)]  // Hide from documentation
+pub fn internal_function() {}
+
+#[doc(inline)]  // Inline documentation from re-exports
+pub use other_crate::SomeType;
+
+#[doc = include_str!("../README.md")]  // Include external file
+pub struct MyStruct;
+```
+
+### Custom CSS and Themes
+
+Rustdoc supports custom styling:
+
+```bash
+rustdoc src/lib.rs --extend-css custom.css
+```
+
+## HTML Template System
+
+Rustdoc uses a template system for HTML generation located in `src/librustdoc/html/templates/`:
+
+<Tip>
+The templates follow strict style guidelines documented in `src/librustdoc/html/templates/STYLE.md`.
+</Tip>
+
+### Static Assets
+
+Rustdoc includes various static assets:
+- **CSS**: Styling for light/dark themes
+- **JavaScript**: Search functionality and interactivity
+- **Fonts**: Custom fonts like Source Serif 4
+
+## JSON Output Format
+
+Rustdoc can generate machine-readable JSON:
+
+```bash
+rustdoc src/lib.rs -Z unstable-options --output-format json
+```
+
+The format is defined in `src/rustdoc-json-types/`.
+
+## Testing Documentation
+
+Rustdoc includes several testing tools:
+
+### Doc Tests
+
+```bash
+# Run all doc tests
+cargo test --doc
+
+# Test specific doc tests
+cargo test --doc specific_function
+```
+
+### Specialized Test Tools
+
+- **`jsondocck`**: Tests JSON output format
+- **`jsondoclint`**: Lints JSON documentation
+- **`rustdoc-gui-test`**: GUI testing for rustdoc output
+- **`html-checker`**: Validates generated HTML
+
+## Performance
+
+Rustdoc can be memory-intensive for large projects:
+
+<Warning>
+For very large documentation builds, consider enabling jemalloc:
+
+```bash
+./x build rustdoc --features jemalloc
+```
+</Warning>
+
+## Resources
+
+- **Rustc Dev Guide**: [rustc-dev-guide.rust-lang.org/rustdoc.html](https://rustc-dev-guide.rust-lang.org/rustdoc.html)
+- **The Rustdoc Book**: [doc.rust-lang.org/rustdoc](https://doc.rust-lang.org/rustdoc/)
+- **Source Code**: `src/librustdoc/` in the Rust repository

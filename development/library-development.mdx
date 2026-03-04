@@ -1,0 +1,668 @@
+---
+title: Library Development Guide
+description: Guide to developing Rust's standard library, core library, and associated libraries
+---
+
+This guide covers development of Rust's standard library ecosystem, including `core`, `alloc`, `std`, and related libraries.
+
+## Library Structure
+
+The Rust standard library is organized into several layers:
+
+<Steps>
+  <Step title="core - The Foundation">
+    The core library is the dependency-free foundation of Rust.
+    
+    **Location:** `library/core/`
+    
+    **Features:**
+    - No dependencies (not even libc)
+    - No heap allocation
+    - No I/O
+    - Platform-agnostic
+    - Used in `#![no_std]` environments
+  </Step>
+
+  <Step title="alloc - Memory Management">
+    The alloc library provides heap allocation primitives.
+    
+    **Location:** `library/alloc/`
+    
+    **Features:**
+    - Requires a global allocator
+    - Collections: `Vec`, `String`, `Box`, etc.
+    - No I/O or OS dependencies
+  </Step>
+
+  <Step title="std - The Standard Library">
+    The standard library builds on core and alloc.
+    
+    **Location:** `library/std/`
+    
+    **Features:**
+    - OS interaction
+    - I/O operations
+    - Threading
+    - File system
+    - Networking
+  </Step>
+</Steps>
+
+## Library Directory Layout
+
+```
+library/
+├── core/                  # Core library (no_std)
+│   ├── src/
+│   │   ├── lib.rs
+│   │   ├── ptr/          # Pointer utilities
+│   │   ├── slice/        # Slice operations
+│   │   ├── str/          # String slice operations
+│   │   └── ...
+│   └── Cargo.toml
+├── alloc/                 # Allocation and collections
+│   ├── src/
+│   │   ├── lib.rs
+│   │   ├── vec/          # Vec implementation
+│   │   ├── string.rs     # String type
+│   │   ├── boxed.rs      # Box type
+│   │   └── collections/  # HashMap, BTreeMap, etc.
+│   └── Cargo.toml
+├── std/                   # Standard library
+│   ├── src/
+│   │   ├── lib.rs
+│   │   ├── fs/           # File system
+│   │   ├── io/           # I/O traits and types
+│   │   ├── net/          # Networking
+│   │   ├── thread/       # Threading
+│   │   └── ...
+│   └── Cargo.toml
+├── test/                  # Test framework
+├── proc_macro/            # Procedural macros
+├── panic_abort/           # Panic abort handler
+├── panic_unwind/          # Panic unwinding
+├── unwind/                # Stack unwinding
+└── backtrace/             # Backtrace support
+```
+
+## Setting Up for Library Development
+
+<Steps>
+  <Step title="Configure for library development">
+    Create or modify `config.toml`:
+
+    ```toml
+    profile = "library"
+    
+    [llvm]
+    download-ci-llvm = true
+    
+    [rust]
+    # Download pre-built compiler if working only on library
+    download-rustc = "if-unchanged"
+    
+    # Build library with debug info
+    debuginfo-level-std = 1
+    ```
+  </Step>
+
+  <Step title="Build the library">
+    ```bash
+    # Build just the standard library
+    ./x.py build library/std
+    
+    # Build core library
+    ./x.py build library/core
+    
+    # Build alloc library
+    ./x.py build library/alloc
+    ```
+  </Step>
+
+  <Step title="Test your changes">
+    ```bash
+    # Test standard library
+    ./x.py test library/std
+    
+    # Test core library
+    ./x.py test library/core
+    
+    # Test specific module
+    ./x.py test library/std --test-args vec
+    ```
+  </Step>
+</Steps>
+
+## Working with Core Library
+
+### Core Library Constraints
+
+The core library has special restrictions:
+
+<Warning>
+  The core library cannot:
+  - Use heap allocation
+  - Perform I/O operations
+  - Access the file system
+  - Use OS-specific features
+  - Depend on external crates (except compiler intrinsics)
+</Warning>
+
+### Example: Adding to Core
+
+<Tabs>
+  <Tab title="Safe API">
+    ```rust
+    // library/core/src/slice/mod.rs
+    
+    impl<T> [T] {
+        /// Returns the first element of the slice.
+        #[stable(feature = "slice_first", since = "1.0.0")]
+        pub const fn first(&self) -> Option<&T> {
+            if let [first, ..] = self {
+                Some(first)
+            } else {
+                None
+            }
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Unsafe API">
+    ```rust
+    // library/core/src/ptr/mod.rs
+    
+    /// Reads the value from `src` without moving it.
+    #[inline]
+    #[stable(feature = "rust1", since = "1.0.0")]
+    pub const unsafe fn read<T>(src: *const T) -> T {
+        // SAFETY: the caller must guarantee that `src` is valid
+        unsafe {
+            let mut tmp = MaybeUninit::<T>::uninit();
+            copy_nonoverlapping(src, tmp.as_mut_ptr(), 1);
+            tmp.assume_init()
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Tests">
+    ```rust
+    // library/core/tests/slice.rs
+    
+    #[test]
+    fn test_first() {
+        let v: &[i32] = &[1, 2, 3];
+        assert_eq!(v.first(), Some(&1));
+        
+        let empty: &[i32] = &[];
+        assert_eq!(empty.first(), None);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Working with Alloc Library
+
+### Memory Allocation Primitives
+
+The alloc library provides heap-allocated types:
+
+<CodeGroup>
+```rust Vec Implementation
+// library/alloc/src/vec/mod.rs
+
+impl<T> Vec<T> {
+    pub fn push(&mut self, value: T) {
+        // Check if we need to grow the buffer
+        if self.len == self.buf.capacity() {
+            self.grow_amortized(self.len + 1);
+        }
+        unsafe {
+            let end = self.as_mut_ptr().add(self.len);
+            ptr::write(end, value);
+            self.len += 1;
+        }
+    }
+}
+```
+
+```rust String Operations
+// library/alloc/src/string.rs
+
+impl String {
+    pub fn push_str(&mut self, string: &str) {
+        self.vec.extend_from_slice(string.as_bytes())
+    }
+    
+    pub fn push(&mut self, ch: char) {
+        match ch.len_utf8() {
+            1 => self.vec.push(ch as u8),
+            _ => self.vec.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
+        }
+    }
+}
+```
+
+```rust Collections
+// library/alloc/src/collections/btree/map.rs
+
+impl<K: Ord, V> BTreeMap<K, V> {
+    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        match self.entry(key) {
+            Occupied(mut entry) => Some(entry.insert(value)),
+            Vacant(entry) => {
+                entry.insert(value);
+                None
+            }
+        }
+    }
+}
+```
+</CodeGroup>
+
+## Working with Std Library
+
+### Platform-Specific Code
+
+The std library contains platform-specific implementations:
+
+<Tabs>
+  <Tab title="Unix">
+    ```rust
+    // library/std/src/sys/pal/unix/fs.rs
+    
+    #[cfg(unix)]
+    pub fn read_dir(path: &Path) -> io::Result<ReadDir> {
+        let path = cstr(path)?;
+        unsafe {
+            let ptr = libc::opendir(path.as_ptr());
+            if ptr.is_null() {
+                Err(io::Error::last_os_error())
+            } else {
+                Ok(ReadDir { dirp: ptr, root: path })
+            }
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```rust
+    // library/std/src/sys/pal/windows/fs.rs
+    
+    #[cfg(windows)]
+    pub fn read_dir(path: &Path) -> io::Result<ReadDir> {
+        let path = to_u16s(path)?;
+        unsafe {
+            let mut find_data = c::WIN32_FIND_DATAW::default();
+            let handle = c::FindFirstFileW(path.as_ptr(), &mut find_data);
+            if handle == c::INVALID_HANDLE_VALUE {
+                Err(io::Error::last_os_error())
+            } else {
+                Ok(ReadDir { handle, first: Some(find_data) })
+            }
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Common Interface">
+    ```rust
+    // library/std/src/fs.rs
+    
+    pub fn read_dir<P: AsRef<Path>>(path: P) -> io::Result<ReadDir> {
+        // Delegates to platform-specific implementation
+        sys::fs::read_dir(path.as_ref())
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Library Development Workflow
+
+<Steps>
+  <Step title="Make your changes">
+    Edit the appropriate library file in `library/core/`, `library/alloc/`, or `library/std/`.
+  </Step>
+
+  <Step title="Add tests">
+    <Tabs>
+      <Tab title="Doc Tests">
+        ```rust
+        /// Returns the first element.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// let v = vec![1, 2, 3];
+        /// assert_eq!(v.first(), Some(&1));
+        /// ```
+        pub fn first(&self) -> Option<&T> {
+            // implementation
+        }
+        ```
+      </Tab>
+
+      <Tab title="Unit Tests">
+        ```rust
+        // In library/core/tests/ or library/std/tests/
+        
+        #[test]
+        fn test_vec_push() {
+            let mut v = Vec::new();
+            v.push(1);
+            v.push(2);
+            assert_eq!(v, [1, 2]);
+        }
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Build and test">
+    ```bash
+    # Build the library
+    ./x.py build library/std
+    
+    # Run library tests
+    ./x.py test library/std
+    
+    # Run doc tests
+    ./x.py test library/std --doc
+    
+    # Test specific module
+    ./x.py test library/std --test-args vec
+    ```
+  </Step>
+
+  <Step title="Check all platforms">
+    ```bash
+    # Test on different platforms
+    ./x.py test library/std --target x86_64-pc-windows-gnu
+    ./x.py test library/std --target aarch64-apple-darwin
+    ```
+  </Step>
+</Steps>
+
+## Library Features
+
+### Feature Flags in Std
+
+The standard library uses feature flags for conditional compilation:
+
+```rust
+// library/std/Cargo.toml
+[features]
+backtrace = ["addr2line", "object", "miniz_oxide"]
+panic-unwind = ["dep:panic_unwind"]
+compiler-builtins-mem = ["alloc/compiler-builtins-mem"]
+```
+
+Usage in code:
+
+```rust
+#[cfg(feature = "backtrace")]
+pub mod backtrace;
+
+#[cfg(not(feature = "backtrace"))]
+pub mod backtrace {
+    // Stub implementation
+}
+```
+
+## Stability Attributes
+
+All public APIs must have stability attributes:
+
+<CodeGroup>
+```rust Stable
+#[stable(feature = "rust1", since = "1.0.0")]
+pub fn is_empty(&self) -> bool {
+    self.len() == 0
+}
+```
+
+```rust Unstable
+#![feature(slice_pattern)]
+
+#[unstable(feature = "slice_pattern", issue = "56345")]
+pub fn as_chunks<const N: usize>(&self) -> (&[[T; N]], &[T]) {
+    // implementation
+}
+```
+
+```rust Const Unstable
+#[rustc_const_unstable(feature = "const_slice_index", issue = "none")]
+pub const fn get(&self, index: usize) -> Option<&T> {
+    // implementation
+}
+```
+</CodeGroup>
+
+## Testing Libraries
+
+### Test Organization
+
+<Tabs>
+  <Tab title="Library Tests">
+    ```
+    library/
+    ├── core/tests/         # Core library tests
+    │   ├── slice.rs
+    │   ├── iter.rs
+    │   └── ...
+    ├── alloc/tests/        # Alloc library tests
+    │   ├── vec.rs
+    │   ├── string.rs
+    │   └── ...
+    └── std/tests/          # Std library tests
+        ├── fs.rs
+        ├── thread.rs
+        └── ...
+    ```
+  </Tab>
+
+  <Tab title="Doc Tests">
+    Embedded in the library source:
+
+    ```rust
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    ///
+    /// let mut map = HashMap::new();
+    /// map.insert(1, "a");
+    /// assert_eq!(map.get(&1), Some(&"a"));
+    /// ```
+    ```
+  </Tab>
+
+  <Tab title="Integration Tests">
+    ```bash
+    # Located in tests/ui, tests/run-make, etc.
+    ./x.py test tests/ui --test-args library
+    ```
+  </Tab>
+</Tabs>
+
+### Running Library Tests
+
+<CodeGroup>
+```bash Standard Tests
+# All standard library tests
+./x.py test library/std
+
+# Specific test file
+./x.py test library/std --test-args vec
+
+# With output
+./x.py test library/std -- --nocapture
+```
+
+```bash Core Tests
+# All core tests
+./x.py test library/core
+
+# Specific module
+./x.py test library/core --test-args slice
+```
+
+```bash Doc Tests
+# Run doc tests
+./x.py test library/std --doc
+
+# Specific module doc tests
+./x.py test library/std --doc --test-args vec
+```
+</CodeGroup>
+
+## Cross-Platform Development
+
+### Platform Abstraction Layers
+
+The std library uses a Platform Abstraction Layer (PAL):
+
+```
+library/std/src/sys/pal/
+├── unix/           # Unix-like systems
+│   ├── linux/     # Linux-specific
+│   ├── macos/     # macOS-specific
+│   └── ...
+├── windows/        # Windows
+├── wasm/          # WebAssembly
+└── unsupported/   # Unsupported platforms
+```
+
+### Conditional Compilation
+
+<CodeGroup>
+```rust OS Detection
+#[cfg(target_os = "linux")]
+fn platform_specific() {
+    // Linux implementation
+}
+
+#[cfg(target_os = "windows")]
+fn platform_specific() {
+    // Windows implementation
+}
+
+#[cfg(target_family = "unix")]
+fn unix_specific() {
+    // All Unix-like systems
+}
+```
+
+```rust Architecture
+#[cfg(target_arch = "x86_64")]
+fn x86_64_specific() {
+    // x86_64 implementation
+}
+
+#[cfg(target_arch = "aarch64")]
+fn aarch64_specific() {
+    // ARM64 implementation
+}
+```
+
+```rust Feature Gates
+#[cfg(feature = "backtrace")]
+pub use backtrace::Backtrace;
+
+#[cfg(not(feature = "backtrace"))]
+pub struct Backtrace;
+```
+</CodeGroup>
+
+## Performance Considerations
+
+<CardGroup cols={2}>
+  <Card title="Use #[inline]" icon="gauge-high">
+    ```rust
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    ```
+    Small functions benefit from inlining
+  </Card>
+
+  <Card title="Avoid Allocations" icon="memory">
+    Use iterators and stack allocation when possible
+  </Card>
+
+  <Card title="Benchmarking" icon="chart-line">
+    ```bash
+    ./x.py bench library/std
+    ```
+  </Card>
+
+  <Card title="Size Optimization" icon="minimize">
+    Use `optimize_for_size` feature for embedded targets
+  </Card>
+</CardGroup>
+
+## Common Tasks
+
+<AccordionGroup>
+  <Accordion title="Adding a new method to Vec">
+    1. Edit `library/alloc/src/vec/mod.rs`
+    2. Add implementation with stability attributes
+    3. Add doc tests with examples
+    4. Add unit tests in `library/alloc/tests/vec.rs`
+    5. Run `./x.py test library/alloc`
+  </Accordion>
+
+  <Accordion title="Fixing a bug in std::fs">
+    1. Edit `library/std/src/fs.rs` or platform-specific file
+    2. Add regression test
+    3. Test on multiple platforms
+    4. Run `./x.py test library/std --test-args fs`
+  </Accordion>
+
+  <Accordion title="Optimizing core::slice">
+    1. Edit `library/core/src/slice/mod.rs`
+    2. Add benchmarks if needed
+    3. Ensure no unsafe code bugs
+    4. Test thoroughly with Miri: `./x.py test library/core --stage 0`
+  </Accordion>
+</AccordionGroup>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Std Dev Guide" icon="book" href="https://std-dev-guide.rust-lang.org/">
+    Standard library development guide
+  </Card>
+  
+  <Card title="Library Team" icon="users" href="https://rust-lang.zulipchat.com/#narrow/stream/219381-t-libs">
+    Chat with the library team on Zulip
+  </Card>
+  
+  <Card title="API Guidelines" icon="list-check" href="https://rust-lang.github.io/api-guidelines/">
+    Rust API design guidelines
+  </Card>
+  
+  <Card title="Libs Tracking" icon="rectangle-list" href="https://github.com/rust-lang/rust/labels/T-libs">
+    Library issues on GitHub
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Compiler Development" icon="gears" href="/development/compiler-development">
+    Learn about compiler development
+  </Card>
+  
+  <Card title="Debugging" icon="bug" href="/development/debugging">
+    Debug library issues
+  </Card>
+  
+  <Card title="Profiling" icon="chart-line" href="/development/profiling">
+    Profile library performance
+  </Card>
+</CardGroup>

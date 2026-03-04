@@ -1,0 +1,581 @@
+---
+title: Procedural Macro Support
+description: Support library for defining procedural macros in Rust
+---
+
+The `proc_macro` crate is a support library for macro authors when defining new procedural macros. This library, provided by the standard distribution, provides the types consumed in the interfaces of procedurally defined macro definitions.
+
+<Note>
+The proc_macro crate is only intended for use inside the implementation of procedural macros. All functions panic if invoked outside of a procedural macro context.
+</Note>
+
+## Overview
+
+Procedural macros come in three flavors:
+
+1. **Function-like macros** - `#[proc_macro]`
+2. **Derive macros** - `#[proc_macro_derive]`
+3. **Attribute macros** - `#[proc_macro_attribute]`
+
+All three types consume and produce `TokenStream`s.
+
+## Token Streams
+
+<Accordion title="TokenStream - Abstract token sequences">
+The main type provided by this crate, representing an abstract stream of tokens, or more specifically, a sequence of token trees.
+
+```rust
+use proc_macro::TokenStream;
+
+#[proc_macro]
+pub fn my_macro(input: TokenStream) -> TokenStream {
+    // Process the input tokens
+    input
+}
+```
+
+**Key methods:**
+```rust
+// Create empty stream
+let ts = TokenStream::new();
+
+// Check if empty
+if ts.is_empty() {
+    // ...
+}
+
+// Parse from string
+let ts: TokenStream = "fn foo() {}".parse().unwrap();
+
+// Convert to string
+let s = ts.to_string();
+```
+
+**Iteration:**
+```rust
+for tree in input {
+    match tree {
+        TokenTree::Group(g) => { /* ... */ },
+        TokenTree::Ident(i) => { /* ... */ },
+        TokenTree::Punct(p) => { /* ... */ },
+        TokenTree::Literal(l) => { /* ... */ },
+    }
+}
+```
+</Accordion>
+
+## Token Trees
+
+<Accordion title="TokenTree - Individual tokens">
+A single token or a delimited sequence of token trees.
+
+```rust
+use proc_macro::{TokenTree, Group, Ident, Punct, Literal};
+
+let tree = match token_tree {
+    TokenTree::Group(g) => {
+        // Delimited sequence: (), {}, []
+        let delimiter = g.delimiter();
+        let stream = g.stream();
+        // ...
+    },
+    TokenTree::Ident(i) => {
+        // Identifier
+        let name = i.to_string();
+        // ...
+    },
+    TokenTree::Punct(p) => {
+        // Punctuation: +, -, *, etc.
+        let ch = p.as_char();
+        let spacing = p.spacing();
+        // ...
+    },
+    TokenTree::Literal(l) => {
+        // Literal: "hello", 42, 3.14
+        let s = l.to_string();
+        // ...
+    },
+};
+```
+</Accordion>
+
+## Procedural Macro Types
+
+### Function-like Macros
+
+<Accordion title="#[proc_macro] - Function-like macros">
+Define macros that look like function calls.
+
+```rust
+use proc_macro::TokenStream;
+
+#[proc_macro]
+pub fn make_answer(_item: TokenStream) -> TokenStream {
+    "fn answer() -> u32 { 42 }".parse().unwrap()
+}
+```
+
+**Usage:**
+```rust
+make_answer!();
+
+fn main() {
+    assert_eq!(answer(), 42);
+}
+```
+
+**Complex example:**
+```rust
+#[proc_macro]
+pub fn sql(input: TokenStream) -> TokenStream {
+    // Parse SQL query from input
+    // Generate Rust code to execute query
+    // Return generated code as TokenStream
+    todo!()
+}
+
+// Usage: sql!(SELECT * FROM users WHERE id = ?)
+```
+</Accordion>
+
+### Derive Macros
+
+<Accordion title="#[proc_macro_derive] - Custom derive">
+Define custom derive macros that generate code for structs and enums.
+
+```rust
+use proc_macro::TokenStream;
+
+#[proc_macro_derive(Builder)]
+pub fn derive_builder(input: TokenStream) -> TokenStream {
+    // Parse the input struct
+    // Generate builder implementation
+    // Return generated code
+    todo!()
+}
+```
+
+**Usage:**
+```rust
+#[derive(Builder)]
+struct Config {
+    name: String,
+    debug: bool,
+}
+
+// Generated code allows:
+let config = Config::builder()
+    .name("app".to_string())
+    .debug(true)
+    .build();
+```
+
+**With helper attributes:**
+```rust
+#[proc_macro_derive(Builder, attributes(builder))]
+pub fn derive_builder(input: TokenStream) -> TokenStream {
+    // Can now use #[builder(...)] attributes
+    todo!()
+}
+
+// Usage:
+#[derive(Builder)]
+struct Config {
+    #[builder(default = "unnamed")]
+    name: String,
+}
+```
+</Accordion>
+
+### Attribute Macros
+
+<Accordion title="#[proc_macro_attribute] - Attribute macros">
+Define macros that can be attached to items as attributes.
+
+```rust
+use proc_macro::TokenStream;
+
+#[proc_macro_attribute]
+pub fn route(attr: TokenStream, item: TokenStream) -> TokenStream {
+    // attr: The attribute arguments (e.g., GET, "/path")
+    // item: The item the attribute is attached to
+    // Return modified item
+    todo!()
+}
+```
+
+**Usage:**
+```rust
+#[route(GET, "/users")]
+fn get_users() -> Response {
+    // Handler function
+}
+```
+
+**Processing both inputs:**
+```rust
+#[proc_macro_attribute]
+pub fn log_calls(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let level = attr.to_string(); // "debug", "info", etc.
+    // Parse item as function
+    // Wrap function to log calls
+    // Return modified function
+    todo!()
+}
+```
+</Accordion>
+
+## Core Types
+
+### Identifiers
+
+<Accordion title="Ident - Identifiers">
+Represents an identifier in Rust code.
+
+```rust
+use proc_macro::{Ident, Span};
+
+// Create identifier
+let ident = Ident::new("my_var", Span::call_site());
+let raw_ident = Ident::new_raw("async", Span::call_site());
+
+// Get string value
+let name = ident.to_string();
+
+// Get and set span
+let span = ident.span();
+ident.set_span(Span::call_site());
+```
+
+**Hygiene:**
+```rust
+// Call-site hygiene (default)
+let ident = Ident::new("x", Span::call_site());
+
+// Definition-site hygiene
+let ident = Ident::new("x", Span::def_site());
+
+// Mixed hygiene
+let ident = Ident::new("x", Span::mixed_site());
+```
+</Accordion>
+
+### Literals
+
+<Accordion title="Literal - Literal values">
+Represents literal values like strings, numbers, characters.
+
+```rust
+use proc_macro::Literal;
+
+// Integer literals
+let lit = Literal::u32_suffixed(42); // 42u32
+let lit = Literal::i32_unsuffixed(-5); // -5
+
+// Float literals
+let lit = Literal::f64_suffixed(3.14); // 3.14f64
+let lit = Literal::f32_unsuffixed(2.5); // 2.5
+
+// String literals
+let lit = Literal::string("hello");
+let lit = Literal::character('a');
+let lit = Literal::byte_string(b"data");
+
+// C strings (Rust 2021+)
+let lit = Literal::c_string("null-terminated");
+```
+</Accordion>
+
+### Punctuation
+
+<Accordion title="Punct - Punctuation characters">
+Represents a single punctuation character.
+
+```rust
+use proc_macro::{Punct, Spacing};
+
+// Create punctuation
+let p = Punct::new('+', Spacing::Alone);
+let p = Punct::new('=', Spacing::Joint); // Part of +=
+
+// Get character
+let ch = p.as_char();
+
+// Check spacing
+match p.spacing() {
+    Spacing::Alone => println!("Standalone"),
+    Spacing::Joint => println!("Part of multi-char op"),
+}
+```
+</Accordion>
+
+### Groups
+
+<Accordion title="Group - Delimited sequences">
+Represents a delimited token stream.
+
+```rust
+use proc_macro::{Group, Delimiter, TokenStream};
+
+// Create groups
+let group = Group::new(Delimiter::Parenthesis, tokens);
+let group = Group::new(Delimiter::Brace, tokens);
+let group = Group::new(Delimiter::Bracket, tokens);
+
+// Get delimiter and stream
+let delimiter = group.delimiter();
+let stream = group.stream();
+
+// Spans
+let span = group.span(); // Entire group
+let open = group.span_open(); // Opening delimiter
+let close = group.span_close(); // Closing delimiter
+```
+</Accordion>
+
+## Spans
+
+<Accordion title="Span - Source code locations">
+Represents a region of source code, used for error reporting.
+
+```rust
+use proc_macro::Span;
+
+// Create spans
+let span = Span::call_site(); // Macro invocation site
+let span = Span::def_site(); // Macro definition site
+let span = Span::mixed_site(); // Macro_rules hygiene
+
+// Get source information
+let line = span.line();
+let column = span.column();
+let file = span.file();
+
+// Span manipulation
+let joined = span1.join(span2);
+let resolved = span.resolved_at(other_span);
+let located = span.located_at(other_span);
+
+// Source text
+if let Some(text) = span.source_text() {
+    println!("Source: {}", text);
+}
+```
+</Accordion>
+
+## Error Reporting
+
+<Accordion title="Diagnostic - Compile errors and warnings">
+Create custom compiler diagnostics.
+
+```rust
+use proc_macro::{Diagnostic, Level};
+
+// Create diagnostics
+span.error("invalid syntax").emit();
+span.warning("deprecated usage").emit();
+span.note("consider using X instead").emit();
+span.help("see documentation for details").emit();
+
+// Multiple spans
+let mut diag = Diagnostic::new(
+    Level::Error,
+    "mismatched types"
+);
+diag.span_error(span1, "expected type A");
+diag.span_note(span2, "found type B");
+diag.emit();
+```
+</Accordion>
+
+## Parsing Helpers
+
+<Accordion title="Building TokenStreams">
+Common patterns for constructing token streams.
+
+```rust
+use proc_macro::{TokenStream, TokenTree, Ident, Punct, Spacing};
+use quote::quote; // Recommended external crate
+
+// Manual construction
+let mut tokens = TokenStream::new();
+tokens.extend(vec![
+    TokenTree::Ident(Ident::new("fn", Span::call_site())),
+    TokenTree::Ident(Ident::new("foo", Span::call_site())),
+    // ...
+]);
+
+// Using quote (recommended)
+let name = Ident::new("my_fn", Span::call_site());
+let tokens = quote! {
+    fn #name() {
+        println!("Hello");
+    }
+};
+```
+</Accordion>
+
+## Best Practices
+
+### Error Handling
+
+```rust
+#[proc_macro]
+pub fn my_macro(input: TokenStream) -> TokenStream {
+    match parse_input(input) {
+        Ok(parsed) => generate_code(parsed),
+        Err(e) => {
+            // Return error as compile error
+            e.to_compile_error().into()
+        }
+    }
+}
+```
+
+### Using External Crates
+
+<Note>
+Most proc macro authors use these crates:
+- **syn** - Parsing Rust syntax
+- **quote** - Generating Rust code
+- **proc-macro2** - Wrapper for better testing
+</Note>
+
+```rust
+use proc_macro::TokenStream;
+use quote::quote;
+use syn::{parse_macro_input, DeriveInput};
+
+#[proc_macro_derive(MyDerive)]
+pub fn my_derive(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+    
+    let expanded = quote! {
+        impl MyTrait for #name {
+            fn method(&self) {
+                println!("Called on {}", stringify!(#name));
+            }
+        }
+    };
+    
+    TokenStream::from(expanded)
+}
+```
+
+## Testing Proc Macros
+
+<Accordion title="Testing strategies">
+```rust
+// In your proc-macro crate tests:
+#[test]
+fn test_derive() {
+    let input = quote! {
+        struct MyStruct {
+            field: String,
+        }
+    };
+    
+    let output = my_derive(input.into());
+    
+    // Parse and validate output
+    let output: TokenStream = output.into();
+    // Assert expected structure
+}
+
+// Integration tests in separate crate:
+#[derive(MyDerive)]
+struct TestStruct {
+    field: String,
+}
+
+#[test]
+fn test_generated_impl() {
+    let s = TestStruct {
+        field: "test".to_string(),
+    };
+    s.method(); // Test generated method
+}
+```
+</Accordion>
+
+## Availability Check
+
+<Accordion title="is_available() - Runtime check">
+Check if proc_macro functionality is available.
+
+```rust
+use proc_macro;
+
+if proc_macro::is_available() {
+    // Running inside a proc macro
+} else {
+    // Running in normal code (will panic if proc_macro APIs are called)
+}
+```
+
+Useful for libraries that support both macro and non-macro use cases.
+</Accordion>
+
+## Stability
+
+<Note>
+The proc_macro library has been stable since Rust 1.15.0 for basic functionality. Some advanced features are still unstable and require nightly Rust.
+</Note>
+
+**Stable features:**
+- Basic TokenStream operations
+- Function-like macros
+- Derive macros
+- Attribute macros
+- Span basics
+
+**Unstable features:**
+- `Span::def_site()`
+- Diagnostics API
+- `TokenStream::expand_expr()`
+- Some Span methods
+
+## Common Patterns
+
+### Parsing Attributes
+
+```rust
+#[proc_macro_attribute]
+pub fn my_attr(attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Parse attribute arguments
+    let args = parse_macro_input!(attr as AttributeArgs);
+    
+    // Parse item
+    let mut input = parse_macro_input!(item as ItemFn);
+    
+    // Modify and return
+    quote! {
+        #input
+    }.into()
+}
+```
+
+### Generating Implementations
+
+```rust
+#[proc_macro_derive(Display)]
+pub fn derive_display(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+    
+    quote! {
+        impl std::fmt::Display for #name {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "{}", stringify!(#name))
+            }
+        }
+    }.into()
+}
+```
+
+## Related Crates
+
+- **syn** - Parsing library for Rust syntax
+- **quote** - Quasi-quoting for code generation
+- **proc-macro2** - Stable wrapper around proc_macro

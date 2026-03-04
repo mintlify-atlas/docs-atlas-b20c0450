@@ -1,0 +1,336 @@
+---
+title: "Development Setup"
+description: "Set up your development environment for building and contributing to the Rust compiler"
+---
+
+<Note>
+This document describes **building** Rust **from source**. This is **not recommended** if you don't know what you're doing. If you just want to install Rust, check out the [official installation guide](https://www.rust-lang.org/learn/get-started).
+</Note>
+
+## Prerequisites
+
+Before you begin, ensure you have the necessary tools installed on your system.
+
+### Core Dependencies
+
+All platforms require these basic tools:
+
+<Steps>
+  <Step title="Python 3">
+    Python 3 (or Python 2.7 as a fallback) is required to run the build system
+    ```bash
+    python3 --version
+    ```
+  </Step>
+  <Step title="Git">
+    Version control to clone the repository
+    ```bash
+    git --version
+    ```
+  </Step>
+  <Step title="C Compiler">
+    When building for the host, `cc` is sufficient. Cross-compiling may need additional compilers
+  </Step>
+  <Step title="Additional Tools (Unix)">
+    - `curl` (not needed on Windows)
+    - `pkg-config` (Linux only, when targeting Linux)
+    - `libiconv` (included with glibc on Debian-based distros)
+  </Step>
+</Steps>
+
+### Cargo Dependencies
+
+To build Cargo, you'll also need OpenSSL:
+
+- **Debian/Ubuntu**: `libssl-dev`
+- **Fedora/RHEL**: `openssl-devel`
+- **macOS**: Included by default
+
+### LLVM Build Tools (Optional)
+
+<Warning>
+If building LLVM from source, you'll need additional tools. However, using pre-built LLVM is recommended for most contributors.
+</Warning>
+
+Required tools if building LLVM from source:
+
+- **C++ Compiler**: `g++`, `clang++`, or MSVC (see [LLVM requirements](https://llvm.org/docs/GettingStarted.html#host-c-toolchain-both-compiler-and-standard-library))
+- **Build System**: `ninja` (recommended, especially on Windows) or GNU `make` 3.81+
+- **CMake**: Version per [LLVM documentation](https://llvm.org/docs/GettingStarted.html#software)
+- **Linux Only**: `libstdc++-static` (Fedora, Ubuntu)
+
+<Tip>
+On tier 1 or tier 2 platforms with host tools, you can download pre-built LLVM by setting `llvm.download-ci-llvm = true` in your config. This significantly speeds up build times.
+</Tip>
+
+## Platform-Specific Setup
+
+<Tabs>
+  <Tab title="Unix-like (Linux/macOS)">
+    ### Clone the Repository
+
+    ```bash
+    git clone https://github.com/rust-lang/rust.git
+    cd rust
+    ```
+
+    ### Configure the Build
+
+    The interactive setup is recommended for new contributors:
+
+    ```bash
+    ./x.py setup
+    ```
+
+    This will guide you through:
+    - Selecting a config profile (user, compiler, library, etc.)
+    - Setting up LSP for your editor
+    - Configuring Git hooks
+    - Other development preferences
+
+    <Accordion title="Advanced: Using the configure script">
+      For complex configurations, use the `configure` script:
+
+      ```bash
+      ./configure --build=x86_64-unknown-linux-gnu \
+        --enable-full-tools \
+        --enable-profiler \
+        --enable-sanitizers \
+        --set llvm.download-ci-llvm=true \
+        --set rust.debug-assertions=true
+      ```
+
+      This generates a `bootstrap.toml` file with your settings.
+    </Accordion>
+
+    ### Build and Install
+
+    ```bash
+    ./x.py build && ./x.py install
+    ```
+
+    When complete, `./x.py install` will place several programs into `$PREFIX/bin`:
+    - `rustc`: The Rust compiler
+    - `rustdoc`: The API documentation tool
+    - `cargo`: The package manager (unless disabled with `--set build.extended=false`)
+  </Tab>
+
+  <Tab title="Windows (MSVC)">
+    ### Install Dependencies
+
+    Using [winget](https://github.com/microsoft/winget-cli):
+
+    ```powershell
+    winget install -e Python.Python.3
+    winget install -e Kitware.CMake
+    winget install -e Git.Git
+    ```
+
+    Add `C:\Program Files\CMake\bin` to your system PATH.
+
+    ### Install Visual Studio
+
+    MSVC builds require:
+    - **Visual Studio 2022** (or later) build tools
+    - **C++ build tools** package
+    - **Recent Windows 10 or 11 SDK**
+
+    Download [Visual Studio](https://visualstudio.microsoft.com/downloads/) and check "C++ build tools" during installation.
+
+    <Warning>
+    Be careful that "C++ CMake tools for Windows" doesn't get included under "Individual components" if installing CMake separately.
+    </Warning>
+
+    ### Build the Compiler
+
+    In `cmd.exe`:
+
+    ```cmd
+    python x.py setup user
+    python x.py build
+    ```
+
+    <Accordion title="Troubleshooting: Visual Studio version issues">
+      If you have multiple Visual Studio versions and the build system doesn't understand your version, manually call the appropriate vcvars file:
+
+      ```batch
+      CALL "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat"
+      python x.py build
+      ```
+    </Accordion>
+  </Tab>
+
+  <Tab title="Windows (MinGW)">
+    ### Install MSYS2
+
+    <Steps>
+      <Step title="Download MSYS2">
+        Get the latest [MSYS2 installer](https://www.msys2.org/) and run through the installation
+      </Step>
+      <Step title="Install Git for Windows">
+        Download [Git for Windows](https://git-scm.com/download/win) and ensure it's in your PATH
+        
+        Edit the relevant `mingw[32|64].ini` file in your MSYS2 installation directory and uncomment:
+        ```ini
+        MSYS2_PATH_TYPE=inherit
+        ```
+      </Step>
+      <Step title="Start MINGW Shell">
+        Launch MINGW64 or MINGW32 shell from your start menu or by running `mingw64.exe`/`mingw32.exe`
+      </Step>
+      <Step title="Install Build Tools">
+        ```bash
+        # Update package mirrors
+        pacman -Sy pacman-mirrors
+
+        # Install build tools (replace x86_64 with i686 for 32-bit)
+        pacman -S make \
+                    diffutils \
+                    tar \
+                    mingw-w64-x86_64-python \
+                    mingw-w64-x86_64-cmake \
+                    mingw-w64-x86_64-gcc \
+                    mingw-w64-x86_64-ninja
+        ```
+
+        <Warning>
+        Do **not** use the `python2`, `cmake`, and `ninja` packages from the `msys2` subsystem. The build has historically been known to fail with these packages.
+        </Warning>
+      </Step>
+      <Step title="Build Rust">
+        ```bash
+        cd /path/to/rust
+        python x.py setup dist && python x.py build && python x.py install
+        ```
+      </Step>
+    </Steps>
+
+    <Tip>
+    Using Git for Windows is often **much** faster than MSYS2's git. Turning off real-time protection in Windows Virus & Threat Protection settings can also help with long run times.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## The Build System: x.py
+
+The Rust build system uses a Python script called `x.py` to build the compiler and manage the bootstrapping process.
+
+### Basic Usage
+
+```bash
+./x.py <subcommand> [flags]
+```
+
+Common subcommands:
+
+<CodeGroup>
+```bash Build
+./x.py build
+```
+
+```bash Test
+./x.py test
+```
+
+```bash Doc
+./x.py doc
+```
+
+```bash Install
+./x.py install
+```
+
+```bash Check
+./x.py check
+```
+</CodeGroup>
+
+### Configuration Files
+
+The build system looks for `bootstrap.toml` in the project root. You can also specify a custom config:
+
+```bash
+./x.py build --config path/to/custom-config.toml
+```
+
+<Tip>
+See `bootstrap.example.toml` for a full list of configuration options with detailed comments.
+</Tip>
+
+## Common Build Profiles
+
+The `./x.py setup` command offers several profiles:
+
+| Profile | Description | Use Case |
+|---------|-------------|----------|
+| **user** | Basic profile for trying out changes | Casual contributors |
+| **compiler** | Optimized for compiler development | Working on rustc |
+| **library** | Optimized for std library work | Standard library development |
+| **dist** | Full build with all tools | Creating distributions |
+
+## Building Documentation
+
+To build the documentation:
+
+```bash
+./x.py doc
+```
+
+The generated documentation will appear under `doc` in the `build` directory for your target ABI. For example, if the ABI is `x86_64-pc-windows-msvc`, the directory will be `build/x86_64-pc-windows-msvc/doc`.
+
+## Specifying Build Targets
+
+You can specify the target triple using:
+
+```bash
+./x.py build --build=<triple>
+```
+
+Or by configuring in `bootstrap.toml`:
+
+```bash
+./configure --set build.build=<triple>
+```
+
+### Available Windows Build Triples
+
+**GNU ABI (using GCC):**
+- `i686-pc-windows-gnu`
+- `x86_64-pc-windows-gnu`
+
+**MSVC ABI:**
+- `i686-pc-windows-msvc`
+- `x86_64-pc-windows-msvc`
+
+## Bootstrap Process
+
+<Note>
+Since the Rust compiler is written in Rust, it must be built by a precompiled "snapshot" version of itself (made in an earlier stage of development). As such, source builds require an Internet connection to fetch snapshots.
+</Note>
+
+Only "host tools" platforms have a pre-compiled snapshot binary available. To compile for a platform without host tools, you must cross-compile.
+
+See the [platform support documentation](https://doc.rust-lang.org/nightly/rustc/platform-support.html) for a list of supported platforms.
+
+## Optimizing Build Times
+
+<CardGroup cols={2}>
+  <Card title="Use CI LLVM" icon="download">
+    Set `llvm.download-ci-llvm = true` to download pre-built LLVM instead of building it
+  </Card>
+  <Card title="Reduce Debuginfo" icon="memory">
+    Set `rust.debuginfo-level = 1` for faster builds with basic debugging capability
+  </Card>
+  <Card title="Use Incremental" icon="rotate">
+    Set `rust.incremental = true` to enable incremental compilation
+  </Card>
+  <Card title="Limit Codegen Units" icon="gauge">
+    Set `rust.codegen-units = 0` to use the default (faster builds, slower runtime)
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Learn the Workflow" icon="code-branch" href="/contributing/workflow">
+  Now that your environment is set up, learn how to make contributions and submit changes
+</Card>

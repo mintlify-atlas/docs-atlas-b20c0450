@@ -1,0 +1,780 @@
+---
+title: Profiling and Performance
+description: Profile the Rust compiler and optimize its performance using various profiling tools and techniques
+---
+
+This guide covers profiling the Rust compiler to understand and improve its performance, including compilation speed, memory usage, and runtime efficiency.
+
+## Why Profile the Compiler?
+
+<CardGroup cols={2}>
+  <Card title="Compilation Speed" icon="gauge-high">
+    Reduce time spent compiling Rust code
+  </Card>
+  <Card title="Memory Usage" icon="memory">
+    Minimize compiler memory consumption
+  </Card>
+  <Card title="Query Optimization" icon="database">
+    Optimize the query system for better caching
+  </Card>
+  <Card title="Code Quality" icon="code">
+    Improve generated code performance
+  </Card>
+</CardGroup>
+
+## Profiling Setup
+
+<Steps>
+  <Step title="Build for profiling">
+    Configure `config.toml` for profiling:
+
+    ```toml
+    [rust]
+    # Enable profiler runtime
+    profiler = true
+    
+    # Debug info for profiling
+    debuginfo-level = 1
+    debuginfo-level-rustc = 1
+    
+    # Optimize for profiling
+    optimize = true
+    
+    # Keep frame pointers for better stack traces
+    frame-pointers = true
+    ```
+  </Step>
+
+  <Step title="Build the compiler">
+    ```bash
+    # Build optimized compiler with profiling support
+    ./x.py build --stage 1
+    
+    # Or build specific components
+    ./x.py build compiler/rustc_driver
+    ```
+  </Step>
+
+  <Step title="Install profiling tools">
+    <Tabs>
+      <Tab title="Linux">
+        ```bash
+        # perf
+        sudo apt-get install linux-tools-common linux-tools-generic
+        
+        # flamegraph
+        cargo install flamegraph
+        
+        # measureme
+        cargo install measureme
+        
+        # samply
+        cargo install samply
+        ```
+      </Tab>
+      <Tab title="macOS">
+        ```bash
+        # Instruments (Xcode)
+        xcode-select --install
+        
+        # cargo-instruments
+        cargo install cargo-instruments
+        
+        # measureme
+        cargo install measureme
+        
+        # samply
+        cargo install samply
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```bash
+        # measureme
+        cargo install measureme
+        
+        # Windows Performance Analyzer
+        # Download from Microsoft
+        
+        # samply
+        cargo install samply
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+## Self-Profiling with measureme
+
+Rustc has built-in self-profiling using the `measureme` framework:
+
+### Basic Self-Profiling
+
+<Tabs>
+  <Tab title="Enable Self-Profiling">
+    ```bash
+    # Profile a compilation
+    rustc -Z self-profile file.rs
+    
+    # This creates file-pid.mm_profdata
+    # Profile with custom name
+    rustc -Z self-profile=my_profile file.rs
+    ```
+  </Tab>
+
+  <Tab title="Profile Events">
+    ```bash
+    # Profile specific events
+    rustc -Z self-profile-events=default,args file.rs
+    
+    # Available event types:
+    # - default: basic profiling
+    # - query-cache-hits: query cache statistics  
+    # - query-blocked: query blocking information
+    # - incr-result-hashing: incremental hash computation
+    # - args: function arguments
+    ```
+  </Tab>
+
+  <Tab title="Analyze Results">
+    ```bash
+    # Install analysis tools
+    cargo install measureme
+    
+    # Summarize results
+    summarize file-pid.mm_profdata
+    
+    # Generate flamegraph
+    flamegraph file-pid.mm_profdata
+    
+    # Generate Chrome trace
+    crox file-pid.mm_profdata
+    # Open chrome://tracing and load file.json
+    ```
+  </Tab>
+</Tabs>
+
+### Analyzing Self-Profile Data
+
+<CodeGroup>
+```bash Summary
+# Get summary statistics
+summarize file-pid.mm_profdata
+
+# Output shows:
+# - Total time
+# - Time per query
+# - Invocation counts
+# - Cache hit rates
+```
+
+```bash Flamegraph
+# Generate flamegraph
+flamegraph file-pid.mm_profdata
+
+# Opens flamegraph in browser
+# Shows call stack and time distribution
+```
+
+```bash Chrome Tracing
+# Generate Chrome trace format
+crox file-pid.mm_profdata
+
+# Load in Chrome:
+# 1. Open chrome://tracing
+# 2. Click "Load"
+# 3. Select generated .json file
+```
+
+```bash Diff
+# Compare two profiles
+mmview diff file1-pid.mm_profdata file2-pid.mm_profdata
+
+# Shows performance changes between runs
+```
+</CodeGroup>
+
+## Time-Passes Profiling
+
+Track time spent in each compiler pass:
+
+<Tabs>
+  <Tab title="Basic Time Tracking">
+    ```bash
+    # Time all passes
+    rustc -Z time-passes file.rs
+    
+    # Output shows time for each pass:
+    # - parsing
+    # - expansion  
+    # - type checking
+    # - borrowck
+    # - codegen
+    ```
+  </Tab>
+
+  <Tab title="With LLVM Timing">
+    ```bash
+    # Include LLVM pass timing
+    rustc -Z time-passes -Z time-llvm-passes file.rs
+    
+    # Shows detailed LLVM optimization times
+    ```
+  </Tab>
+
+  <Tab title="Pretty Printing">
+    ```bash
+    # Pretty print timing info
+    rustc -Z time-passes file.rs 2>&1 | grep "time:"
+    
+    # Save to file for analysis
+    rustc -Z time-passes file.rs 2>&1 | tee timing.txt
+    ```
+  </Tab>
+</Tabs>
+
+## CPU Profiling
+
+### Using perf (Linux)
+
+<Steps>
+  <Step title="Record profile">
+    ```bash
+    # Record CPU profile
+    perf record -F 99 -g ./build/stage1/bin/rustc file.rs
+    
+    # Record with call graph
+    perf record -F 99 --call-graph dwarf ./build/stage1/bin/rustc file.rs
+    ```
+  </Step>
+
+  <Step title="Analyze results">
+    <Tabs>
+      <Tab title="perf report">
+        ```bash
+        # Interactive report
+        perf report
+        
+        # Show call graph
+        perf report --stdio
+        
+        # Filter by function
+        perf report --stdio | grep function_name
+        ```
+      </Tab>
+      <Tab title="Flamegraph">
+        ```bash
+        # Generate flamegraph from perf data
+        perf script | stackcollapse-perf.pl | flamegraph.pl > flame.svg
+        
+        # Or use cargo-flamegraph
+        cargo flamegraph --bin rustc -- file.rs
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+### Using Instruments (macOS)
+
+<CodeGroup>
+```bash Time Profiler
+# Profile with Time Profiler
+cargo instruments --template time --bin rustc -- file.rs
+
+# Opens Instruments.app with results
+```
+
+```bash Allocations
+# Profile memory allocations
+cargo instruments --template alloc --bin rustc -- file.rs
+```
+
+```bash System Trace
+# Full system trace
+cargo instruments --template sys --bin rustc -- file.rs
+```
+</CodeGroup>
+
+### Using samply (Cross-Platform)
+
+<Tabs>
+  <Tab title="Basic Profiling">
+    ```bash
+    # Profile with samply
+    samply record ./build/stage1/bin/rustc file.rs
+    
+    # Opens profiler.firefox.com with results
+    ```
+  </Tab>
+
+  <Tab title="With Arguments">
+    ```bash
+    # Profile with rustc arguments
+    samply record ./build/stage1/bin/rustc -C opt-level=3 file.rs
+    ```
+  </Tab>
+</Tabs>
+
+## Memory Profiling
+
+### Heap Profiling with Valgrind
+
+<Tabs>
+  <Tab title="Massif">
+    ```bash
+    # Profile heap usage over time
+    valgrind --tool=massif ./build/stage1/bin/rustc file.rs
+    
+    # Analyze with ms_print
+    ms_print massif.out.12345
+    
+    # Visualize with massif-visualizer
+    massif-visualizer massif.out.12345
+    ```
+  </Tab>
+
+  <Tab title="DHAT">
+    ```bash
+    # Detailed heap analyzer
+    valgrind --tool=dhat ./build/stage1/bin/rustc file.rs
+    
+    # Shows:
+    # - Allocation patterns
+    # - Peak memory usage
+    # - Lifetime of allocations
+    ```
+  </Tab>
+</Tabs>
+
+### Memory Statistics
+
+<CodeGroup>
+```bash Print Type Sizes
+# Show size of types in compilation
+rustc -Z print-type-sizes file.rs
+
+# Helps identify large types causing memory issues
+```
+
+```bash Memory Usage
+# Track memory usage during compilation
+command time -v ./build/stage1/bin/rustc file.rs
+
+# Shows:
+# - Maximum resident set size
+# - Page faults
+# - Context switches
+```
+
+```bash Allocation Tracking
+# Enable allocation statistics
+RUSTFLAGS="-Z print-fuel=crate_name" cargo build
+```
+</CodeGroup>
+
+## Query Performance Analysis
+
+### Query Profiling
+
+The compiler's query system is a major performance factor:
+
+<Tabs>
+  <Tab title="Query Statistics">
+    ```bash
+    # Profile query execution
+    rustc -Z self-profile-events=default,query-cache-hits file.rs
+    
+    # Analyze cache hit rates
+    summarize file-pid.mm_profdata --query-stats
+    ```
+  </Tab>
+
+  <Tab title="Dependency Graph">
+    ```bash
+    # Dump query dependency graph
+    rustc -Z dump-dep-graph file.rs
+    
+    # Creates dep-graph.txt showing query dependencies
+    ```
+  </Tab>
+
+  <Tab title="Query Blocking">
+    ```bash
+    # Track query blocking
+    rustc -Z self-profile-events=query-blocked file.rs
+    
+    # Shows which queries block on others
+    ```
+  </Tab>
+</Tabs>
+
+### Incremental Compilation
+
+<CodeGroup>
+```bash Incremental Stats
+# Enable incremental compilation stats
+RUSTC_LOG=rustc_incremental=debug rustc file.rs
+
+# Shows:
+# - Cache hits/misses
+# - Reused query results
+# - Invalidated queries
+```
+
+```bash Incremental Profiling
+# Profile incremental compilation
+rustc -Z self-profile -C incremental=incr file.rs
+
+# Make changes and recompile
+rustc -Z self-profile -C incremental=incr file.rs
+
+# Compare profiles
+mmview diff file1-pid.mm_profdata file2-pid.mm_profdata
+```
+</CodeGroup>
+
+## LLVM Performance
+
+### LLVM Pass Timing
+
+<Tabs>
+  <Tab title="Time LLVM Passes">
+    ```bash
+    # Time all LLVM passes
+    rustc -Z time-llvm-passes file.rs
+    
+    # With detailed output
+    rustc -C llvm-args=-time-passes file.rs
+    ```
+  </Tab>
+
+  <Tab title="Optimization Remarks">
+    ```bash
+    # Get optimization remarks
+    rustc -C llvm-args="-pass-remarks=inline" file.rs
+    
+    # All optimization remarks
+    rustc -C llvm-args="-pass-remarks=.*" file.rs 2>&1 | tee remarks.txt
+    ```
+  </Tab>
+
+  <Tab title="LLVM Stats">
+    ```bash
+    # Enable LLVM statistics
+    rustc -C llvm-args=-stats file.rs
+    
+    # Shows:
+    # - Number of functions
+    # - Instructions processed
+    # - Pass execution counts
+    ```
+  </Tab>
+</Tabs>
+
+### LLVM Profiling
+
+<CodeGroup>
+```bash PGO (Profile-Guided Optimization)
+# Step 1: Build with instrumentation
+rustc -C profile-generate=./pgo-data file.rs
+
+# Step 2: Run the program
+./file
+
+# Step 3: Process profile data
+llvm-profdata merge -o merged.profdata ./pgo-data
+
+# Step 4: Build with profile
+rustc -C profile-use=merged.profdata file.rs
+```
+
+```bash LLVM Remarks
+# Save optimization remarks
+rustc -C llvm-args="-pass-remarks-output=remarks.yaml" file.rs
+
+# Analyze remarks
+llvm-opt-report remarks.yaml
+```
+</CodeGroup>
+
+## Benchmarking
+
+### Compiler Benchmarks
+
+<Steps>
+  <Step title="Run rustc-perf">
+    ```bash
+    # Clone rustc-perf
+    git clone https://github.com/rust-lang/rustc-perf
+    cd rustc-perf
+    
+    # Build collector
+    cargo build --release -p collector
+    
+    # Run benchmarks
+    ./target/release/collector bench_local ./build/stage1/bin/rustc
+    ```
+  </Step>
+
+  <Step title="Analyze results">
+    ```bash
+    # View results
+    ./target/release/collector analyze
+    
+    # Compare with baseline
+    ./target/release/collector compare baseline.json new.json
+    ```
+  </Step>
+</Steps>
+
+### Custom Benchmarks
+
+<CodeGroup>
+```bash Hyperfine
+# Install hyperfine
+cargo install hyperfine
+
+# Benchmark compilation
+hyperfine './build/stage1/bin/rustc file.rs'
+
+# Compare different versions
+hyperfine \
+  --warmup 3 \
+  './old-rustc file.rs' \
+  './new-rustc file.rs'
+```
+
+```bash Criterion
+# For library benchmarks
+# In library/std/benches/lib.rs
+use criterion::{criterion_group, criterion_main, Criterion};
+
+fn bench_function(c: &mut Criterion) {
+    c.bench_function("my_function", |b| {
+        b.iter(|| my_function());
+    });
+}
+
+criterion_group!(benches, bench_function);
+criterion_main!(benches);
+```
+</CodeGroup>
+
+## Performance Analysis Workflow
+
+<Steps>
+  <Step title="Establish baseline">
+    ```bash
+    # Profile before changes
+    rustc -Z self-profile=baseline file.rs
+    summarize baseline-pid.mm_profdata > baseline.txt
+    ```
+  </Step>
+
+  <Step title="Make changes">
+    Implement your performance improvement
+  </Step>
+
+  <Step title="Profile again">
+    ```bash
+    # Profile after changes
+    rustc -Z self-profile=improved file.rs
+    summarize improved-pid.mm_profdata > improved.txt
+    ```
+  </Step>
+
+  <Step title="Compare results">
+    ```bash
+    # Compare profiles
+    mmview diff baseline-pid.mm_profdata improved-pid.mm_profdata
+    
+    # Look for:
+    # - Reduced query execution time
+    # - Better cache hit rates
+    # - Fewer invocations
+    ```
+  </Step>
+
+  <Step title="Validate improvement">
+    ```bash
+    # Run benchmarks
+    ./target/release/collector bench_local ./build/stage1/bin/rustc
+    
+    # Check against perf suite
+    ./x.py test src/tools/rustc-perf
+    ```
+  </Step>
+</Steps>
+
+## Common Performance Issues
+
+<AccordionGroup>
+  <Accordion title="Slow query execution">
+    **Symptoms:** High time in specific queries
+    
+    **Diagnosis:**
+    ```bash
+    rustc -Z self-profile file.rs
+    summarize file-pid.mm_profdata --query-stats
+    ```
+    
+    **Solutions:**
+    - Add caching
+    - Optimize hot paths
+    - Reduce query invocations
+  </Accordion>
+
+  <Accordion title="Poor cache hit rate">
+    **Symptoms:** Low query cache hits
+    
+    **Diagnosis:**
+    ```bash
+    rustc -Z self-profile-events=query-cache-hits file.rs
+    ```
+    
+    **Solutions:**
+    - Improve query key design
+    - Enable incremental compilation
+    - Reduce query invalidation
+  </Accordion>
+
+  <Accordion title="High memory usage">
+    **Symptoms:** Excessive memory consumption
+    
+    **Diagnosis:**
+    ```bash
+    valgrind --tool=massif ./build/stage1/bin/rustc file.rs
+    ```
+    
+    **Solutions:**
+    - Reduce type sizes
+    - Optimize data structures
+    - Free unused memory
+  </Accordion>
+
+  <Accordion title="Slow LLVM codegen">
+    **Symptoms:** Long time in codegen phase
+    
+    **Diagnosis:**
+    ```bash
+    rustc -Z time-llvm-passes file.rs
+    ```
+    
+    **Solutions:**
+    - Reduce codegen units
+    - Optimize MIR
+    - Disable expensive LLVM passes
+  </Accordion>
+</AccordionGroup>
+
+## Optimization Tips
+
+<CardGroup cols={2}>
+  <Card title="Query Optimization" icon="database">
+    - Cache expensive computations
+    - Minimize query parameters
+    - Use shallow queries when possible
+    - Avoid unnecessary query dependencies
+  </Card>
+
+  <Card title="Memory Optimization" icon="memory">
+    - Use arena allocation
+    - Intern strings and types
+    - Free temporary data
+    - Use compact data structures
+  </Card>
+
+  <Card title="Compilation Speed" icon="gauge-high">
+    - Enable incremental compilation
+    - Use query caching effectively
+    - Parallelize independent work
+    - Reduce redundant computation
+  </Card>
+
+  <Card title="Code Generation" icon="code">
+    - Optimize MIR before codegen
+    - Use appropriate optimization levels
+    - Enable LTO for release builds
+    - Profile-guided optimization
+  </Card>
+</CardGroup>
+
+## Performance Testing in CI
+
+### Setting Up Performance Tests
+
+<CodeGroup>
+```yaml GitHub Actions
+name: Performance Test
+
+on: [pull_request]
+
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Build
+        run: ./x.py build --stage 1
+      
+      - name: Profile
+        run: |
+          rustc -Z self-profile test.rs
+          summarize test-*.mm_profdata > results.txt
+      
+      - name: Check for regressions
+        run: ./check-perf-regression.sh
+```
+
+```bash Regression Check
+#!/bin/bash
+# check-perf-regression.sh
+
+BASELINE=$(cat baseline-time.txt)
+CURRENT=$(cat current-time.txt)
+
+REGRESSION=$(echo "scale=2; ($CURRENT - $BASELINE) / $BASELINE * 100" | bc)
+
+if (( $(echo "$REGRESSION > 5" | bc -l) )); then
+    echo "Performance regression detected: ${REGRESSION}%"
+    exit 1
+fi
+```
+</CodeGroup>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Profiling Guide" icon="book" href="https://rustc-dev-guide.rust-lang.org/profiling.html">
+    Rustc dev guide profiling chapter
+  </Card>
+  
+  <Card title="measureme" icon="chart-line" href="https://github.com/rust-lang/measureme">
+    Self-profiling framework
+  </Card>
+  
+  <Card title="rustc-perf" icon="gauge" href="https://github.com/rust-lang/rustc-perf">
+    Compiler performance benchmarking
+  </Card>
+  
+  <Card title="Performance Book" icon="rocket" href="https://nnethercote.github.io/perf-book/">
+    Rust performance book
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Debugging" icon="bug" href="/development/debugging">
+    Learn debugging techniques
+  </Card>
+  
+  <Card title="Compiler Development" icon="gears" href="/development/compiler-development">
+    Return to compiler development
+  </Card>
+  
+  <Card title="Library Development" icon="book-open" href="/development/library-development">
+    Optimize library code
+  </Card>
+</CardGroup>

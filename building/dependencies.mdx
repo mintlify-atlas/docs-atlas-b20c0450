@@ -1,0 +1,310 @@
+---
+title: Build Dependencies
+description: Required dependencies and tools for building the Rust compiler from source
+---
+
+## Core Dependencies
+
+These dependencies are required for all platforms:
+
+<AccordionGroup>
+  <Accordion title="Python (3 or 2.7)">
+    The build system requires Python to run `x.py`.
+
+    ```bash Verify Python Installation
+    python --version
+    # or
+    python3 --version
+    ```
+
+    <Note>
+    The version of Python used to execute `x.py` will be used throughout the build process.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Git">
+    Required for cloning the repository and managing submodules.
+
+    ```bash Clone Rust Repository
+    git clone https://github.com/rust-lang/rust.git
+    cd rust
+    ```
+
+    The build system can automatically manage git submodules by setting `build.submodules = true` in `bootstrap.toml` (this is the default).
+  </Accordion>
+
+  <Accordion title="C Compiler">
+    A C compiler is needed for building native dependencies and LLVM.
+
+    - **Unix/Linux**: `cc` or `gcc`
+    - **macOS**: Xcode Command Line Tools
+    - **Windows**: MSVC or MinGW GCC
+
+    <Warning>
+    When cross-compiling, you may need additional compilers for the target platform.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="curl (Unix only)">
+    Used for downloading dependencies. Not required on Windows.
+
+    ```bash Install on Debian/Ubuntu
+    sudo apt-get install curl
+    ```
+
+    ```bash Install on macOS
+    # Usually pre-installed
+    brew install curl
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Linux-Specific Dependencies
+
+When compiling on Linux and targeting Linux:
+
+<CodeGroup>
+```bash Debian/Ubuntu
+sudo apt-get update
+sudo apt-get install \
+  build-essential \
+  curl \
+  git \
+  python3 \
+  pkg-config \
+  libssl-dev
+```
+
+```bash Fedora/RHEL
+sudo dnf install \
+  gcc \
+  gcc-c++ \
+  make \
+  curl \
+  git \
+  python3 \
+  pkg-config \
+  openssl-devel
+```
+
+```bash Arch Linux
+sudo pacman -S \
+  base-devel \
+  curl \
+  git \
+  python \
+  pkg-config \
+  openssl
+```
+</CodeGroup>
+
+### Package Details
+
+| Package | Purpose |
+|---------|----------|
+| `pkg-config` | Required when compiling on and targeting Linux |
+| `libiconv` | Already included with glibc on most distributions |
+| `libssl-dev` / `openssl-devel` | Required for building Cargo |
+
+## LLVM Build Dependencies
+
+<Warning>
+You can skip building LLVM by setting `llvm.download-ci-llvm = true` in `bootstrap.toml` for tier 1 or tier 2 platforms with host tools. This significantly speeds up the build process.
+</Warning>
+
+If building LLVM from source, you'll need:
+
+<Tabs>
+  <Tab title="Compiler">
+    A modern C++ compiler:
+
+    - `g++` (GCC)
+    - `clang++` (Clang/LLVM)
+    - MSVC with version listed on [LLVM's documentation](https://llvm.org/docs/GettingStarted.html#host-c-toolchain-both-compiler-and-standard-library)
+
+    <Note>
+    Check LLVM's documentation for specific version requirements, as they change with each LLVM release.
+    </Note>
+  </Tab>
+
+  <Tab title="Build System">
+    **Ninja** (recommended, especially on Windows) or **GNU Make 3.81+**
+
+    <CodeGroup>
+    ```bash Debian/Ubuntu
+    sudo apt-get install ninja-build
+    ```
+
+    ```bash Fedora/RHEL
+    sudo dnf install ninja-build
+    ```
+
+    ```bash macOS
+    brew install ninja
+    ```
+
+    ```bash Windows (via winget)
+    winget install Ninja-build.Ninja
+    ```
+    </CodeGroup>
+
+    To use Ninja:
+    ```toml bootstrap.toml
+    [llvm]
+    ninja = true
+    ```
+  </Tab>
+
+  <Tab title="CMake">
+    CMake version as specified in [LLVM's documentation](https://llvm.org/docs/GettingStarted.html#software)
+
+    <CodeGroup>
+    ```bash Debian/Ubuntu
+    sudo apt-get install cmake
+    ```
+
+    ```bash Fedora/RHEL
+    sudo dnf install cmake
+    ```
+
+    ```bash macOS
+    brew install cmake
+    ```
+
+    ```bash Windows (via winget)
+    winget install -e Kitware.CMake
+    ```
+    </CodeGroup>
+  </Tab>
+
+  <Tab title="Static Libraries">
+    On some Linux distributions, additional static libraries are required:
+
+    ```bash Fedora/Ubuntu
+    sudo apt-get install libstdc++-static
+    # or
+    sudo dnf install libstdc++-static
+    ```
+  </Tab>
+</Tabs>
+
+## Downloading LLVM (Recommended)
+
+For tier 1 and tier 2 platforms with host tools, you can download pre-built LLVM instead of building from source:
+
+```toml bootstrap.toml
+[llvm]
+# Download LLVM if available, otherwise build from source
+download-ci-llvm = "if-unchanged"
+
+# Always download LLVM (faster builds)
+# download-ci-llvm = true
+```
+
+Benefits:
+- **Much faster builds** - Skip hours of LLVM compilation
+- **Less disk space** - No need for LLVM source tree
+- **Fewer dependencies** - Don't need C++ compiler for LLVM
+
+<Tip>
+After setting `download-ci-llvm = true`, you can deinitialize the LLVM submodule to save space:
+
+```bash
+git submodule deinit src/llvm-project
+```
+</Tip>
+
+## Using System LLVM
+
+Alternatively, you can use LLVM installed on your system:
+
+```toml bootstrap.toml
+[target.x86_64-unknown-linux-gnu]
+llvm-config = "/usr/bin/llvm-config"
+```
+
+<Note>
+See the [rustc-dev-guide](https://rustc-dev-guide.rust-lang.org/building/new-target.html#using-pre-built-llvm) for more information about using pre-built LLVM.
+</Note>
+
+## Optional Dependencies
+
+<AccordionGroup>
+  <Accordion title="ccache - Build Caching">
+    Speed up rebuilds by caching compiler outputs:
+
+    ```bash Install ccache
+    # Debian/Ubuntu
+    sudo apt-get install ccache
+
+    # macOS
+    brew install ccache
+    ```
+
+    Enable in `bootstrap.toml`:
+    ```toml
+    [build]
+    ccache = true
+    # or specify path
+    ccache = "/usr/bin/ccache"
+    ```
+  </Accordion>
+
+  <Accordion title="GDB/LLDB - Debuginfo Tests">
+    Required only for running the debuginfo test suite:
+
+    ```toml bootstrap.toml
+    [build]
+    gdb = "gdb"
+    lldb = "lldb"
+    ```
+  </Accordion>
+
+  <Accordion title="Node.js - Emscripten Tests">
+    Only needed when running tests for the emscripten target:
+
+    ```toml bootstrap.toml
+    [build]
+    nodejs = "node"
+    ```
+  </Accordion>
+
+  <Accordion title="Yarn - Rustdoc GUI Tests">
+    Required for rustdoc-gui tests and tidy js extra-checks:
+
+    ```toml bootstrap.toml
+    [build]
+    # On Windows, use yarn.cmd
+    yarn = "yarn"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Verifying Dependencies
+
+Before starting the build, verify all dependencies are available:
+
+```bash Dependency Check
+# Core tools
+python3 --version
+git --version
+cc --version
+
+# For building LLVM
+cmake --version
+ninja --version
+
+# For Cargo
+pkg-config --version
+```
+
+## Platform-Specific Guides
+
+<CardGroup cols={2}>
+  <Card title="Unix/Linux" icon="linux" href="/building/unix">
+    Complete setup for Unix-like systems
+  </Card>
+  <Card title="Windows" icon="windows" href="/building/windows">
+    Complete setup for Windows (MSVC and MinGW)
+  </Card>
+</CardGroup>

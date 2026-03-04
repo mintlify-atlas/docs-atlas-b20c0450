@@ -1,0 +1,243 @@
+---
+title: "Installing Rust"
+description: "Complete guide to installing Rust on your system, including standard installation with rustup and building from source."
+---
+
+## Recommended Installation
+
+The recommended way to install Rust is through **rustup**, the official Rust installer and version management tool.
+
+<Note>
+  Read the full installation guide in [The Rust Book](https://doc.rust-lang.org/book/ch01-01-installation.html) for detailed instructions.
+</Note>
+
+### Quick Install
+
+<Tabs>
+  <Tab title="Unix/Linux/macOS">
+    Open your terminal and run:
+    
+    ```bash
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    ```
+    
+    This will download and run the rustup installer. Follow the on-screen instructions.
+  </Tab>
+  
+  <Tab title="Windows">
+    1. Download and run [rustup-init.exe](https://win.rustup.rs/)
+    2. Follow the on-screen instructions
+    3. You may need to install the Visual Studio C++ Build tools if prompted
+    
+    <Warning>
+      On Windows, Rust requires the Microsoft C++ build tools. The installer will guide you through this process.
+    </Warning>
+  </Tab>
+</Tabs>
+
+### Verifying Installation
+
+After installation, verify Rust is installed correctly:
+
+```bash
+rustc --version
+```
+
+You should see output like:
+
+```
+rustc 1.xx.x (xxxxxxx 20xx-xx-xx)
+```
+
+### Updating Rust
+
+Keep Rust up to date with rustup:
+
+```bash
+rustup update
+```
+
+### Uninstalling Rust
+
+If you ever need to uninstall Rust:
+
+```bash
+rustup self uninstall
+```
+
+## Installing from Source
+
+<Warning>
+  Building Rust from source is **not recommended** unless you know what you're doing. Most users should use rustup instead.
+</Warning>
+
+The Rust build system uses a Python script called `x.py` to build the compiler, which manages the bootstrapping process.
+
+### Prerequisites
+
+Before building from source, ensure you have the required dependencies installed.
+
+<Tabs>
+  <Tab title="Unix/Linux/macOS">
+    Required dependencies:
+    
+    - Python 3 or 2.7
+    - Git
+    - A C compiler (e.g., `gcc` or `clang`)
+    - `curl` (not needed on Windows)
+    - `pkg-config` (Linux only)
+    - OpenSSL development headers (`libssl-dev` or `openssl-devel`)
+    
+    **Optional for building LLVM from source:**
+    - `g++`, `clang++`, or MSVC
+    - `ninja` or GNU `make` 3.81 or later
+    - `cmake` 3.13.4 or later
+  </Tab>
+  
+  <Tab title="Windows">
+    Install dependencies using winget:
+    
+    ```powershell
+    winget install -e Python.Python.3
+    winget install -e Kitware.CMake
+    winget install -e Git.Git
+    ```
+    
+    Then add CMake to your system PATH: `C:\Program Files\CMake\bin`
+    
+    You'll also need:
+    - Visual Studio 2022 (or later) build tools
+    - A recent Windows 10 or 11 SDK
+  </Tab>
+</Tabs>
+
+### Build Steps (Unix/Linux/macOS)
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/rust-lang/rust.git
+    cd rust
+    ```
+  </Step>
+  
+  <Step title="Configure the build">
+    Run the interactive setup:
+    
+    ```bash
+    ./x.py setup
+    ```
+    
+    This will guide you through selecting a configuration profile and setting up your development environment.
+    
+    Alternatively, use the configure script for advanced configurations:
+    
+    ```bash
+    ./configure --enable-full-tools \
+      --enable-profiler \
+      --enable-sanitizers
+    ```
+  </Step>
+  
+  <Step title="Build and install">
+    ```bash
+    ./x.py build && ./x.py install
+    ```
+    
+    This will install `rustc`, `rustdoc`, and by default, Cargo into `$PREFIX/bin`.
+    
+    <Note>
+      You can disable Cargo installation by passing `--set build.extended=false` to configure.
+    </Note>
+  </Step>
+</Steps>
+
+### Build Steps (Windows - MSVC)
+
+<Steps>
+  <Step title="Install prerequisites">
+    - Install Visual Studio 2022 with "C++ build tools" workload
+    - Install Python, CMake, and Git (see Prerequisites tab above)
+  </Step>
+  
+  <Step title="Clone and configure">
+    ```powershell
+    git clone https://github.com/rust-lang/rust.git
+    cd rust
+    python x.py setup user
+    ```
+  </Step>
+  
+  <Step title="Build">
+    ```powershell
+    python x.py build
+    ```
+  </Step>
+</Steps>
+
+### Build Steps (Windows - MinGW)
+
+<Steps>
+  <Step title="Install MSYS2">
+    Download and install [MSYS2](https://www.msys2.org/)
+  </Step>
+  
+  <Step title="Install Git for Windows">
+    Download [Git for Windows](https://git-scm.com/download/win) and ensure it's in your PATH.
+  </Step>
+  
+  <Step title="Install build tools">
+    Open a MINGW64 shell and run:
+    
+    ```bash
+    # Update package mirrors
+    pacman -Sy pacman-mirrors
+    
+    # Install build tools (for 64-bit)
+    pacman -S make diffutils tar \
+      mingw-w64-x86_64-python \
+      mingw-w64-x86_64-cmake \
+      mingw-w64-x86_64-gcc \
+      mingw-w64-x86_64-ninja
+    ```
+    
+    <Note>
+      For 32-bit, replace `x86_64` with `i686` in the package names.
+    </Note>
+  </Step>
+  
+  <Step title="Build and install">
+    ```bash
+    python x.py setup dist && python x.py build && python x.py install
+    ```
+  </Step>
+</Steps>
+
+## Platform Support
+
+Rust supports a wide variety of platforms. Since the compiler is written in Rust, it must be built by a precompiled "snapshot" version of itself.
+
+<Note>
+  Source builds require an internet connection to fetch snapshots, and an OS that can execute the available snapshot binaries.
+</Note>
+
+See the [Rust Platform Support](https://doc.rust-lang.org/nightly/rustc/platform-support.html) page for:
+- Tier 1 platforms (guaranteed to work)
+- Tier 2 platforms (guaranteed to build)
+- Tier 3 platforms (experimental support)
+
+Only platforms with "host tools" have pre-compiled snapshot binaries. To compile for platforms without host tools, you must cross-compile.
+
+## Building Documentation
+
+If you're building from source and want to build the documentation:
+
+```bash
+./x.py doc
+```
+
+The generated documentation will appear in the `build/<triple>/doc` directory, where `<triple>` is your build target (e.g., `x86_64-pc-windows-msvc`).
+
+## Next Steps
+
+Now that you have Rust installed, check out the [Quick Start Guide](/quickstart) to write your first Rust program.

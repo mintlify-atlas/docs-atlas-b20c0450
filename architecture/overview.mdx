@@ -1,0 +1,255 @@
+---
+title: "Architecture Overview"
+description: "High-level architecture of the Rust compiler and toolchain infrastructure"
+---
+
+The Rust compiler repository contains three major architectural components: the compiler itself, the standard library, and the bootstrap build system. This infrastructure enables the unique "bootstrapping" process where Rust compiles itself.
+
+## Repository Structure
+
+The Rust repository is organized into several key directories:
+
+<CardGroup cols={2}>
+  <Card title="Compiler" icon="gear" href="/architecture/compiler">
+    Located in `compiler/`, contains 74+ crates implementing the Rust compiler
+  </Card>
+  <Card title="Standard Library" icon="books" href="/architecture/standard-library">
+    Located in `library/`, includes core, alloc, std, and supporting crates
+  </Card>
+  <Card title="Bootstrap System" icon="rocket" href="/architecture/bootstrap">
+    Located in `src/bootstrap/`, manages the multi-stage build process
+  </Card>
+  <Card title="Tools" icon="wrench">
+    Located in `src/tools/`, includes rustdoc, clippy, rustfmt, and more
+  </Card>
+</CardGroup>
+
+## Core Architectural Principles
+
+### Self-Hosting Compiler
+
+Rust is a **self-hosting compiler**, meaning it's written in Rust and compiles itself. This creates a unique bootstrapping challenge that's solved through a three-stage build process:
+
+1. **Stage 0**: Download pre-built compiler binaries
+2. **Stage 1**: Use stage 0 to compile the current source
+3. **Stage 2**: Use stage 1 to recompile, ensuring consistency
+
+<Note>
+The bootstrap system defers most compilation logic to Cargo itself, handling only stage management and artifact copying.
+</Note>
+
+### Modular Compiler Design
+
+The compiler is split into 74+ distinct crates, each handling a specific phase or aspect of compilation:
+
+```mermaid
+graph LR
+    A[Source Code] --> B[rustc_lexer]
+    B --> C[rustc_parse]
+    C --> D[rustc_ast]
+    D --> E[rustc_hir]
+    E --> F[rustc_middle/MIR]
+    F --> G[rustc_codegen_*]
+    G --> H[Binary Output]
+```
+
+## Workspace Organization
+
+The repository uses Cargo workspaces to manage dependencies:
+
+<Tabs>
+  <Tab title="Root Workspace">
+    The root `Cargo.toml` defines the main workspace with 74+ compiler crates and various tools:
+
+    ```toml
+    [workspace]
+    resolver = "2"
+    members = [
+      "compiler/rustc",
+      "src/tools/clippy",
+      "src/tools/rustfmt",
+      # ... 40+ more members
+    ]
+    ```
+  </Tab>
+  
+  <Tab title="Library Workspace">
+    The `library/Cargo.toml` manages the standard library crates:
+
+    ```toml
+    [workspace]
+    resolver = "1"
+    members = [
+      "std",
+      "core",
+      "alloc",
+      "test",
+    ]
+    ```
+  </Tab>
+  
+  <Tab title="Bootstrap Workspace">
+    Bootstrap has its own workspace and is compiled separately from the compiler it builds.
+  </Tab>
+</Tabs>
+
+## Compilation Pipeline
+
+The Rust compilation process follows a well-defined pipeline:
+
+### 1. Lexing and Parsing
+
+- **rustc_lexer**: Converts source text into tokens
+- **rustc_parse**: Builds an Abstract Syntax Tree (AST)
+- **rustc_ast**: Defines AST data structures
+
+### 2. AST to HIR
+
+- **rustc_ast_lowering**: Converts AST to High-Level Intermediate Representation (HIR)
+- **rustc_hir**: Defines HIR, a more semantic representation
+- **rustc_resolve**: Performs name resolution
+
+### 3. Type Checking and Analysis
+
+- **rustc_hir_analysis**: Type checking and trait resolution
+- **rustc_hir_typeck**: Type inference
+- **rustc_trait_selection**: Trait solving
+- **rustc_borrowck**: Borrow checking (Rust's ownership system)
+
+### 4. MIR Generation and Optimization
+
+- **rustc_mir_build**: Builds Mid-Level Intermediate Representation (MIR)
+- **rustc_mir_transform**: Performs MIR optimizations
+- **rustc_const_eval**: Constant evaluation
+
+### 5. Code Generation
+
+- **rustc_monomorphize**: Generates concrete code for generic functions
+- **rustc_codegen_ssa**: Shared codegen abstractions
+- **rustc_codegen_llvm**: LLVM backend (default)
+- **rustc_codegen_cranelift**: Alternative Cranelift backend
+- **rustc_codegen_gcc**: Alternative GCC backend
+
+<Info>
+The compiler supports multiple code generation backends through the `rustc_codegen_ssa` abstraction layer.
+</Info>
+
+## Shared Infrastructure
+
+Several crates provide shared functionality across the compiler:
+
+<AccordionGroup>
+  <Accordion title="Data Structures">
+    **rustc_data_structures**: Specialized data structures optimized for compiler use, including:
+    - Interned strings and symbols
+    - Persistent maps and sets
+    - Graph structures
+    - Fingerprinting for incremental compilation
+  </Accordion>
+  
+  <Accordion title="Diagnostics">
+    **rustc_errors**: Comprehensive error reporting infrastructure:
+    - Error formatting and styling
+    - Multi-span diagnostics
+    - Suggestions and help messages
+    - Error code documentation
+  </Accordion>
+  
+  <Accordion title="Session Management">
+    **rustc_session**: Manages compilation session state:
+    - Compiler options and configuration
+    - Target information
+    - Source file tracking
+    - Incremental compilation state
+  </Accordion>
+  
+  <Accordion title="Queries">
+    **rustc_query_impl**: Implements the query system for incremental compilation:
+    - Demand-driven computation
+    - Dependency tracking
+    - Caching and memoization
+  </Accordion>
+</AccordionGroup>
+
+## Build Output Structure
+
+The bootstrap system organizes all build artifacts under the `build/` directory:
+
+```
+build/
+├── cache/           # Downloaded stage0 compiler tarballs
+├── bootstrap/       # Bootstrap binary itself
+├── dist/            # Distribution artifacts
+├── <host-triple>/   # Per-target build artifacts
+│   ├── stage0/      # Extracted stage0 compiler
+│   ├── stage1/      # Stage 1 compiler and sysroot
+│   ├── stage2/      # Stage 2 compiler and sysroot
+│   ├── llvm/        # LLVM build artifacts
+│   ├── doc/         # Generated documentation
+│   └── test/        # Test suite outputs
+└── tmp/             # Temporary files
+```
+
+## Key Design Decisions
+
+### Query-Based Compilation
+
+The compiler uses a **query system** for incremental compilation. Instead of sequential passes, queries compute information on-demand with automatic caching and dependency tracking.
+
+### Three Intermediate Representations
+
+Rust uses three IRs for different purposes:
+
+- **AST**: Direct representation of source syntax
+- **HIR**: Simplified, name-resolved representation for type checking
+- **MIR**: Control-flow based representation for optimization and borrow checking
+
+### Backend Abstraction
+
+The `rustc_codegen_ssa` crate provides an abstraction layer, allowing multiple code generation backends (LLVM, Cranelift, GCC).
+
+## Integration Points
+
+### Entry Points
+
+- **rustc_driver_impl**: Main driver coordinating compilation phases
+- **rustc_interface**: Public API for driving compilation
+- **rustc**: Binary wrapper providing the rustc command-line tool
+
+### External Dependencies
+
+Key external dependencies include:
+
+- **LLVM**: Default code generation backend
+- **Cargo**: Build system and package manager
+- **Various tools**: clippy (linter), rustfmt (formatter), rustdoc (documentation)
+
+## Performance Considerations
+
+<Note>
+The bootstrap system disables debug info for dependencies to significantly reduce compilation times, only enabling it for bootstrap itself.
+</Note>
+
+Compilation performance optimizations include:
+
+- **Incremental compilation**: Recompile only changed code
+- **Parallel compilation**: Build multiple crates simultaneously
+- **Query caching**: Avoid redundant computation
+- **Demand-driven execution**: Only compute what's needed
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Compiler Architecture" icon="microchip" href="/architecture/compiler">
+    Deep dive into the 74+ compiler crates and compilation pipeline
+  </Card>
+  <Card title="Standard Library" icon="book" href="/architecture/standard-library">
+    Architecture of core, alloc, std, and platform support
+  </Card>
+  <Card title="Bootstrap System" icon="arrows-rotate" href="/architecture/bootstrap">
+    How Rust compiles itself through a three-stage process
+  </Card>
+  <Card title="rustc dev guide" icon="external-link">
+    Official compiler development guide: https://rustc-dev-guide.rust-lang.org/
+  </Card>
+</CardGroup>

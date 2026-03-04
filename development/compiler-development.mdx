@@ -1,0 +1,475 @@
+---
+title: Compiler Development Guide
+description: Learn how to develop and modify the Rust compiler, including its architecture, build system, and development workflow
+---
+
+This guide covers the essentials of developing the Rust compiler itself, from understanding its architecture to building and testing your changes.
+
+## Compiler Architecture
+
+The Rust compiler is organized into multiple crates, each handling specific compilation phases:
+
+<CardGroup cols={2}>
+  <Card title="rustc_driver" icon="gears">
+    Orchestrates the compilation process and knits together code from other crates
+  </Card>
+  <Card title="rustc_ast" icon="code-branch">
+    Abstract Syntax Tree representation and parsing
+  </Card>
+  <Card title="rustc_hir" icon="diagram-project">
+    High-level Intermediate Representation after AST lowering
+  </Card>
+  <Card title="rustc_middle" icon="cube">
+    Core type system and middle-stage representations
+  </Card>
+  <Card title="rustc_codegen_*" icon="microchip">
+    Code generation backends (LLVM, Cranelift, GCC)
+  </Card>
+  <Card title="rustc_borrowck" icon="lock">
+    Borrow checker implementation
+  </Card>
+</CardGroup>
+
+## Setting Up Your Development Environment
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/rust-lang/rust.git
+    cd rust
+    ```
+  </Step>
+
+  <Step title="Configure your build">
+    Create a `config.toml` file in the root directory:
+
+    ```bash
+    ./configure
+    # Or use the setup wizard
+    ./x.py setup
+    ```
+
+    <Tabs>
+      <Tab title="Development Profile">
+        ```toml
+        profile = "compiler"
+        
+        [llvm]
+        download-ci-llvm = true
+        
+        [rust]
+        debug = true
+        debug-assertions = true
+        incremental = true
+        ```
+      </Tab>
+      <Tab title="Library Profile">
+        ```toml
+        profile = "library"
+        
+        [llvm]
+        download-ci-llvm = true
+        
+        [rust]
+        download-rustc = "if-unchanged"
+        ```
+      </Tab>
+      <Tab title="Performance Profile">
+        ```toml
+        profile = "codegen"
+        
+        [llvm]
+        download-ci-llvm = false
+        assertions = false
+        
+        [rust]
+        debug = false
+        optimize = true
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Build the compiler">
+    ```bash
+    # Build stage 1 compiler (recommended for development)
+    ./x.py build --stage 1
+    
+    # Build stage 2 compiler (for testing compiler changes)
+    ./x.py build --stage 2
+    ```
+
+    <Note>
+      Stage 1 is usually sufficient for most development work. Stage 2 is needed when you're modifying the compiler itself and need to test those changes.
+    </Note>
+  </Step>
+</Steps>
+
+## Bootstrap Build System
+
+The Rust compiler uses a multi-stage bootstrap process:
+
+```
+Stage 0 (Beta Compiler)
+    ↓ builds
+Stage 1 (Your Changes)
+    ↓ builds  
+Stage 2 (Self-hosting)
+```
+
+### Build Stages Explained
+
+<AccordionGroup>
+  <Accordion title="Stage 0 - Bootstrap Compiler">
+    The stage 0 compiler is downloaded from Rust's CI. This is a pre-built stable or beta compiler used to bootstrap your build.
+
+    **Location:** `build/x86_64-unknown-linux-gnu/stage0/`
+  </Accordion>
+
+  <Accordion title="Stage 1 - First Build">
+    Stage 1 is built using the stage 0 compiler. This includes your changes and is suitable for most development work.
+
+    **Location:** `build/x86_64-unknown-linux-gnu/stage1/`
+    
+    **Use case:** Testing library changes, running the compiler with your modifications
+  </Accordion>
+
+  <Accordion title="Stage 2 - Self-hosting">
+    Stage 2 is built using the stage 1 compiler. This ensures your compiler can compile itself.
+
+    **Location:** `build/x86_64-unknown-linux-gnu/stage2/`
+    
+    **Use case:** Validating compiler changes, running the full test suite
+  </Accordion>
+</AccordionGroup>
+
+## Common Build Commands
+
+### Using x.py
+
+The `x.py` script is the main entry point for building and testing:
+
+<CodeGroup>
+```bash Build Commands
+# Build the compiler
+./x.py build --stage 1
+
+# Build specific components
+./x.py build library/std
+./x.py build compiler/rustc_driver
+
+# Build with verbose output
+./x.py build --stage 1 -v
+
+# Build for a specific target
+./x.py build --target x86_64-unknown-linux-gnu
+```
+
+```bash Check Commands  
+# Fast check without codegen (faster than build)
+./x.py check
+./x.py check --stage 0
+
+# Check specific crates
+./x.py check library/core
+./x.py check compiler/rustc_middle
+```
+
+```bash Test Commands
+# Run specific test suites
+./x.py test tests/ui
+./x.py test tests/run-make
+./x.py test compiler/rustc_borrowck
+
+# Test with a specific stage
+./x.py test --stage 1 library/std
+```
+
+```bash Other Commands
+# Generate documentation
+./x.py doc
+
+# Clean build artifacts
+./x.py clean
+
+# Format code
+./x.py fmt
+```
+</CodeGroup>
+
+## Directory Structure
+
+```
+rust/
+├── compiler/           # Compiler crates
+│   ├── rustc_driver/   # Main driver
+│   ├── rustc_ast/      # Abstract Syntax Tree
+│   ├── rustc_hir/      # High-level IR
+│   ├── rustc_middle/   # Type system, MIR
+│   ├── rustc_borrowck/ # Borrow checker
+│   ├── rustc_codegen_llvm/  # LLVM backend
+│   ├── rustc_codegen_ssa/   # Shared codegen
+│   └── ...             # 70+ compiler crates
+├── library/            # Standard library
+│   ├── std/           # Standard library
+│   ├── core/          # Core library (no_std)
+│   ├── alloc/         # Allocation and collections
+│   └── test/          # Test framework
+├── src/
+│   ├── bootstrap/     # Build system
+│   └── tools/         # Associated tools
+├── tests/             # Compiler test suites
+│   ├── ui/            # Compile-fail tests
+│   ├── run-make/      # Integration tests
+│   ├── codegen-llvm/  # Code generation tests
+│   └── debuginfo/     # Debug info tests
+└── build/             # Build output
+```
+
+## Working with Compiler Crates
+
+### Adding a New Compiler Crate
+
+<Steps>
+  <Step title="Create the crate directory">
+    ```bash
+    mkdir compiler/rustc_my_feature
+    cd compiler/rustc_my_feature
+    ```
+  </Step>
+
+  <Step title="Create Cargo.toml">
+    ```toml
+    [package]
+    name = "rustc_my_feature"
+    version = "0.0.0"
+    edition = "2024"
+    
+    [dependencies]
+    rustc_middle = { path = "../rustc_middle" }
+    rustc_span = { path = "../rustc_span" }
+    ```
+  </Step>
+
+  <Step title="Add to the workspace">
+    Update the root `Cargo.toml` to include your new crate in the workspace members.
+  </Step>
+
+  <Step title="Use in other crates">
+    Add your crate as a dependency in other compiler crates that need it.
+  </Step>
+</Steps>
+
+## Compilation Phases
+
+Understanding the compilation pipeline helps when working on specific components:
+
+<Steps>
+  <Step title="Lexing & Parsing">
+    **Source code → Tokens → AST**
+    
+    Handled by `rustc_lexer` and `rustc_parse`
+  </Step>
+
+  <Step title="Name Resolution">
+    **Resolve names and imports**
+    
+    Handled by `rustc_resolve`
+  </Step>
+
+  <Step title="AST Lowering">
+    **AST → HIR (High-level IR)**
+    
+    Handled by `rustc_ast_lowering`
+  </Step>
+
+  <Step title="Type Checking">
+    **Verify types, trait resolution**
+    
+    Handled by `rustc_hir_analysis`
+  </Step>
+
+  <Step title="MIR Building">
+    **HIR → MIR (Mid-level IR)**
+    
+    Handled by `rustc_mir_build`
+  </Step>
+
+  <Step title="MIR Optimization">
+    **Optimize MIR**
+    
+    Handled by `rustc_mir_transform`
+  </Step>
+
+  <Step title="Borrow Checking">
+    **Verify memory safety**
+    
+    Handled by `rustc_borrowck`
+  </Step>
+
+  <Step title="Code Generation">
+    **MIR → LLVM IR → Machine Code**
+    
+    Handled by `rustc_codegen_llvm`, `rustc_codegen_ssa`
+  </Step>
+</Steps>
+
+## Configuration Options
+
+### Important build.toml Settings
+
+<Tabs>
+  <Tab title="LLVM Options">
+    ```toml
+    [llvm]
+    # Download pre-built LLVM (recommended)
+    download-ci-llvm = true
+    
+    # Enable LLVM assertions (debugging)
+    assertions = true
+    
+    # LLVM targets to build
+    targets = "X86;ARM;AArch64"
+    
+    # Use ninja for faster builds
+    ninja = true
+    ```
+  </Tab>
+
+  <Tab title="Rust Options">
+    ```toml
+    [rust]
+    # Enable debug info
+    debuginfo-level = 1
+    
+    # Enable debug assertions
+    debug-assertions = true
+    
+    # Enable incremental compilation
+    incremental = true
+    
+    # Codegen backends
+    codegen-backends = ["llvm", "cranelift"]
+    
+    # Channel (dev, nightly, beta, stable)
+    channel = "dev"
+    ```
+  </Tab>
+
+  <Tab title="Build Options">
+    ```toml
+    [build]
+    # Number of parallel jobs
+    jobs = 8
+    
+    # Build documentation
+    docs = true
+    
+    # Verbose output
+    verbose = 1
+    
+    # Build extended tools
+    extended = true
+    tools = ["cargo", "rustfmt", "clippy"]
+    ```
+  </Tab>
+</Tabs>
+
+## Development Workflow
+
+### Typical Development Cycle
+
+1. **Make your changes** to compiler crates
+2. **Quick check** with `./x.py check`
+3. **Build stage 1** with `./x.py build --stage 1`
+4. **Run targeted tests** with `./x.py test tests/ui/my-feature`
+5. **Run full test suite** before submitting
+
+<Warning>
+  Always run `./x.py test` before submitting a PR to catch any regressions.
+</Warning>
+
+### Speeding Up Development
+
+<CardGroup cols={2}>
+  <Card title="Use --keep-stage" icon="forward">
+    ```bash
+    ./x.py build --stage 1 --keep-stage 0
+    ```
+    Avoid rebuilding earlier stages
+  </Card>
+  
+  <Card title="Use check instead of build" icon="circle-check">
+    ```bash
+    ./x.py check
+    ```
+    Skip code generation for faster iteration
+  </Card>
+  
+  <Card title="Download pre-built artifacts" icon="download">
+    Set `download-ci-llvm = true` and `download-rustc = "if-unchanged"`
+  </Card>
+  
+  <Card title="Incremental compilation" icon="rotate">
+    ```toml
+    [rust]
+    incremental = true
+    ```
+  </Card>
+</CardGroup>
+
+## Compiler Queries
+
+The Rust compiler uses a query-based architecture for on-demand computation:
+
+```rust
+// Example query definition
+rustc_queries! {
+    query type_of(key: DefId) -> Ty<'tcx> {
+        desc { "computing type of `{}`", key }
+    }
+}
+```
+
+### Key Concepts
+
+- **Queries** are cached, on-demand computations
+- **Incremental compilation** tracks query dependencies
+- **Query results** are memoized between compilations
+- Defined in `rustc_middle/src/query/mod.rs`
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Rustc Dev Guide" icon="book" href="https://rustc-dev-guide.rust-lang.org/">
+    Comprehensive guide to compiler internals
+  </Card>
+  
+  <Card title="Zulip Chat" icon="comments" href="https://rust-lang.zulipchat.com">
+    Get help from the compiler team
+  </Card>
+  
+  <Card title="Forge" icon="hammer" href="https://forge.rust-lang.org/">
+    Infrastructure and process documentation
+  </Card>
+  
+  <Card title="GitHub Issues" icon="github" href="https://github.com/rust-lang/rust/issues">
+    Track bugs and feature requests
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Library Development" icon="book-open" href="/development/library-development">
+    Learn about developing the standard library
+  </Card>
+  
+  <Card title="Debugging" icon="bug" href="/development/debugging">
+    Debug compiler issues and crashes
+  </Card>
+  
+  <Card title="Profiling" icon="chart-line" href="/development/profiling">
+    Profile and optimize compiler performance
+  </Card>
+</CardGroup>

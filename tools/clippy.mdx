@@ -1,0 +1,355 @@
+---
+title: Clippy
+description: A collection of lints to catch common mistakes and improve Rust code
+---
+
+Clippy is Rust's official linter that provides over 800 lints to catch common mistakes and improve code quality. It helps enforce best practices and idiomatic Rust code.
+
+## Overview
+
+Clippy is a powerful static analysis tool that goes beyond the compiler's built-in warnings. It analyzes your code for potential bugs, performance issues, and style violations.
+
+<Note>
+Clippy contains over 800 lints organized into categories based on severity and purpose. See the [complete lint list](https://rust-lang.github.io/rust-clippy/master/index.html).
+</Note>
+
+## Lint Categories
+
+Clippy organizes lints into the following categories:
+
+| Category | Description | Default Level |
+|----------|-------------|---------------|
+| `clippy::correctness` | Code that is outright wrong or useless | **deny** |
+| `clippy::suspicious` | Code that is most likely wrong or useless | **warn** |
+| `clippy::style` | Code that should be written in a more idiomatic way | **warn** |
+| `clippy::complexity` | Code that does something simple but in a complex way | **warn** |
+| `clippy::perf` | Code that can be written to run faster | **warn** |
+| `clippy::pedantic` | Lints which are rather strict or have occasional false positives | allow |
+| `clippy::restriction` | Lints which prevent the use of language and library features | allow |
+| `clippy::nursery` | New lints that are still under development | allow |
+| `clippy::cargo` | Lints for the cargo manifest | allow |
+
+<Warning>
+The `restriction` category should **not** be enabled as a whole. These lints may contradict each other and other categories. Enable them individually based on your specific needs.
+</Warning>
+
+## Installation
+
+<Steps>
+  <Step title="Install Rustup">
+    Ensure you have rustup installed and updated:
+    
+    ```bash
+    rustup update
+    ```
+  </Step>
+  
+  <Step title="Add Clippy Component">
+    Install Clippy as a rustup component:
+    
+    ```bash
+    rustup component add clippy
+    ```
+  </Step>
+  
+  <Step title="Run Clippy">
+    Run Clippy on your project:
+    
+    ```bash
+    cargo clippy
+    ```
+  </Step>
+</Steps>
+
+## Usage
+
+### Basic Usage
+
+```bash
+# Run clippy on the current crate
+cargo clippy
+
+# Automatically apply suggestions
+cargo clippy --fix
+
+# Run on all targets (bins, tests, examples)
+cargo clippy --all-targets
+
+# Run with all features enabled
+cargo clippy --all-features
+```
+
+### Workspace Support
+
+```bash
+# Run on a specific package in a workspace
+cargo clippy -p example
+
+# Run only on the specified package, excluding dependencies
+cargo clippy -p example -- --no-deps
+```
+
+### Using clippy-driver Directly
+
+For projects that don't use Cargo:
+
+```bash
+clippy-driver --edition 2021 -Cpanic=abort foo.rs
+```
+
+<Tip>
+`clippy-driver` is designed for running Clippy only and should not be used as a general replacement for `rustc`.
+</Tip>
+
+## Configuration
+
+### Lint Levels in Code
+
+Control lints within your Rust code:
+
+```rust
+// Allow a specific lint for the entire crate
+#![allow(clippy::single_match)]
+
+// Warn on a lint
+#![warn(clippy::pedantic)]
+
+// Deny a lint (makes it an error)
+#![deny(clippy::unwrap_used)]
+
+// Allow for a specific function
+#[allow(clippy::too_many_arguments)]
+fn complex_function(a: i32, b: i32, c: i32, d: i32, e: i32, f: i32, g: i32) {
+    // ...
+}
+```
+
+### Command-Line Configuration
+
+```bash
+# Allow a specific lint
+cargo clippy -- -A clippy::lint_name
+
+# Warn on a specific lint
+cargo clippy -- -W clippy::lint_name
+
+# Deny all warnings
+cargo clippy -- -D warnings
+
+# Enable pedantic lints
+cargo clippy -- -W clippy::pedantic
+```
+
+### Configuration File
+
+Create a `clippy.toml` or `.clippy.toml` file in your project:
+
+```toml
+# clippy.toml
+avoid-breaking-exported-api = false
+disallowed-names = ["toto", "tata", "titi"]
+
+# Extend default values with ".."
+disallowed-names = ["bar", ".."]
+```
+
+<Note>
+`clippy.toml` cannot be used to allow/deny lints, only to configure their behavior.
+</Note>
+
+### Minimum Supported Rust Version (MSRV)
+
+Specify MSRV to disable lints for newer features:
+
+```toml
+# clippy.toml
+msrv = "1.65.0"
+```
+
+Or in `Cargo.toml`:
+
+```toml
+[package]
+rust-version = "1.65"
+```
+
+Or as an attribute:
+
+```rust
+#![feature(custom_inner_attributes)]
+#![clippy::msrv = "1.65.0"]
+```
+
+## Building Clippy from Source
+
+Clippy is located at `src/tools/clippy/` in the Rust repository.
+
+### Package Structure
+
+From `src/tools/clippy/Cargo.toml`:
+
+```toml
+[package]
+name = "clippy"
+version = "0.1.95"
+description = "A bunch of helpful lints to avoid common pitfalls in Rust"
+edition = "2024"
+
+[[bin]]
+name = "cargo-clippy"
+path = "src/main.rs"
+
+[[bin]]
+name = "clippy-driver"
+path = "src/driver.rs"
+
+[dependencies]
+clippy_lints = { path = "clippy_lints" }
+clippy_utils = { path = "clippy_utils" }
+```
+
+### Build with Bootstrap
+
+```bash
+# Build clippy
+./x build clippy
+
+# Test clippy
+./x test clippy
+
+# Build and test a specific lint
+./x test tests/ui/my_lint.rs
+```
+
+## Clippy Components
+
+Clippy is organized into several crates:
+
+<CardGroup cols={2}>
+  <Card title="clippy_lints" icon="list-check">
+    Contains all lint implementations. Each lint is defined and implemented here.
+  </Card>
+  
+  <Card title="clippy_utils" icon="wrench">
+    Utility functions and helpers used by lint implementations.
+  </Card>
+  
+  <Card title="clippy_config" icon="gear">
+    Configuration handling and parsing for clippy.toml.
+  </Card>
+  
+  <Card title="rustc_tools_util" icon="toolbox">
+    Utilities for building rustc-based tools.
+  </Card>
+</CardGroup>
+
+## CI Integration
+
+### GitHub Actions
+
+```yaml
+name: Clippy
+on: [push, pull_request]
+
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy
+          override: true
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+```
+
+### Travis CI
+
+```yaml
+language: rust
+rust:
+  - stable
+  - beta
+before_script:
+  - rustup component add clippy
+script:
+  - cargo clippy -- -D warnings
+  - cargo test
+```
+
+## Common Lints Examples
+
+### Correctness Lints
+
+```rust
+// ❌ Bad: Incorrect use of clone
+let x = Box::new(5);
+let y = x.clone(); // Use *x instead
+
+// ❌ Bad: Suspicious else formatting
+if condition {
+    do_something();
+}
+else {  // Should be on same line as closing brace
+    do_other();
+}
+```
+
+### Performance Lints
+
+```rust
+// ❌ Bad: Unnecessary collect
+let sum: i32 = vec.iter().collect::<Vec<_>>().iter().sum();
+
+// ✅ Good: Direct iteration
+let sum: i32 = vec.iter().sum();
+
+// ❌ Bad: Using clone in a loop
+for item in items.iter() {
+    let owned = item.clone();  // Consider using references
+}
+```
+
+### Style Lints
+
+```rust
+// ❌ Bad: Redundant field names
+let point = Point { x: x, y: y };
+
+// ✅ Good: Field init shorthand
+let point = Point { x, y };
+
+// ❌ Bad: Explicit return
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+// ✅ Good: Implicit return
+fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+```
+
+## Disabling Specific Warnings
+
+To disable the "for further information visit" messages:
+
+```bash
+export CLIPPY_DISABLE_DOCS_LINKS=1
+```
+
+## Development Tools
+
+Clippy includes several development and testing tools:
+
+- **`lintcheck`**: Tests Clippy against real-world crates
+- **`rustc_tools_util`**: Version and build utilities
+- **`clippy_dev`**: Development tools for adding new lints
+
+## Resources
+
+- **Lint List**: [rust-lang.github.io/rust-clippy/master/index.html](https://rust-lang.github.io/rust-clippy/master/index.html)
+- **Configuration**: [doc.rust-lang.org/nightly/clippy/lint_configuration.html](https://doc.rust-lang.org/nightly/clippy/lint_configuration.html)
+- **Contributing**: `CONTRIBUTING.md` in the Clippy repository
+- **Source Code**: `src/tools/clippy/` in the Rust repository

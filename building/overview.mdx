@@ -1,0 +1,165 @@
+---
+title: Building Rust from Source
+description: Learn how to build the Rust compiler from source code using the x.py build system
+---
+
+<Warning>
+Building Rust from source is **not recommended** unless you're contributing to Rust or need a custom compiler build. If you just want to use Rust, see the [standard installation methods](https://www.rust-lang.org/tools/install) instead.
+</Warning>
+
+## Introduction
+
+The Rust build system uses a Python script called `x.py` to build the compiler, which manages the bootstrapping process. This script lives at the root of the project and handles all aspects of building, testing, and installing Rust.
+
+## The Bootstrap Process
+
+Since the Rust compiler is written in Rust, it must be built by a precompiled "snapshot" version of itself (made in an earlier stage of development). This means:
+
+- Source builds require an Internet connection to fetch snapshots
+- Your OS must be able to execute the available snapshot binaries
+- Only platforms with "host tools" support have pre-compiled snapshots available
+- To compile for platforms without host tools, you must cross-compile
+
+<Note>
+See the [Rust platform support documentation](https://doc.rust-lang.org/nightly/rustc/platform-support.html) for a list of supported platforms and their tier levels.
+</Note>
+
+## Build Configuration
+
+The build system uses a file named `bootstrap.toml` to determine various configuration settings. You can see a full list of options in `bootstrap.example.toml`.
+
+<Tabs>
+  <Tab title="Interactive Setup">
+    The easiest way to get started is with the interactive setup command:
+
+    ```bash
+    ./x.py setup
+    ```
+
+    This will guide you through:
+    - Selecting a config profile (compiler, library, tools, etc.)
+    - Setting up LSP (rust-analyzer)
+    - Configuring Git hooks
+    - Other common development settings
+  </Tab>
+
+  <Tab title="Configure Script">
+    For more control, use the `configure` script to generate `bootstrap.toml`:
+
+    ```bash
+    ./configure --enable-full-tools --enable-profiler
+    ```
+
+    This is especially useful for creating complex configurations in a single command.
+  </Tab>
+
+  <Tab title="Manual TOML">
+    You can also create `bootstrap.toml` manually:
+
+    ```toml
+    [build]
+    extended = true
+    tools = ["cargo", "clippy", "rustfmt"]
+
+    [llvm]
+    download-ci-llvm = true
+
+    [rust]
+    channel = "dev"
+    ```
+  </Tab>
+</Tabs>
+
+## Running x.py
+
+On most Unix systems, you can run `x.py` directly:
+
+```bash
+./x.py <subcommand> [flags]
+```
+
+Common subcommands include:
+
+- `build` - Build the compiler and standard library
+- `test` - Run the test suite
+- `doc` - Build documentation
+- `install` - Install the built compiler
+- `check` - Quick syntax check without full compilation
+- `clippy` - Run Clippy lints
+- `fmt` - Format code with rustfmt
+
+<CodeGroup>
+```bash Build Compiler
+./x.py build
+```
+
+```bash Build and Install
+./x.py build && ./x.py install
+```
+
+```bash Build Specific Component
+./x.py build library/std
+```
+
+```bash Run Tests
+./x.py test
+```
+</CodeGroup>
+
+## Build Stages
+
+The Rust build happens in stages:
+
+<Steps>
+  <Step title="Stage 0">
+    Uses the downloaded snapshot compiler to build the build system and compile the stage 1 compiler.
+  </Step>
+
+  <Step title="Stage 1">
+    Uses the stage 1 compiler to rebuild itself and produce the stage 2 compiler.
+  </Step>
+
+  <Step title="Stage 2">
+    The stage 2 compiler is the final compiler and can build the standard library and tools.
+  </Step>
+</Steps>
+
+<Note>
+By default, `x.py build` builds through stage 1. Use `--stage 2` to build the final compiler.
+</Note>
+
+## Quick Reference
+
+| Command | Description |
+|---------|-------------|
+| `./x.py setup` | Interactive configuration |
+| `./configure` | Generate bootstrap.toml |
+| `./x.py build` | Build compiler (stage 1) |
+| `./x.py build --stage 2` | Build final compiler |
+| `./x.py test` | Run test suite |
+| `./x.py doc` | Build documentation |
+| `./x.py install` | Install to system |
+| `./x.py --help` | Show all options |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Install Dependencies" icon="download" href="/building/dependencies">
+    Set up required dependencies for your platform
+  </Card>
+  <Card title="Unix Build Guide" icon="linux" href="/building/unix">
+    Step-by-step instructions for Unix-like systems
+  </Card>
+  <Card title="Windows Build Guide" icon="windows" href="/building/windows">
+    Step-by-step instructions for Windows
+  </Card>
+  <Card title="Configuration Options" icon="sliders" href="/building/configuration">
+    Explore all configuration options
+  </Card>
+</CardGroup>
+
+## Additional Resources
+
+- [Rustc Dev Guide](https://rustc-dev-guide.rust-lang.org/) - Comprehensive guide to compiler development
+- [How to Build and Run](https://rustc-dev-guide.rust-lang.org/building/how-to-build-and-run.html) - Detailed build instructions
+- [Getting Started](https://rustc-dev-guide.rust-lang.org/getting-started.html) - Contributing to Rust

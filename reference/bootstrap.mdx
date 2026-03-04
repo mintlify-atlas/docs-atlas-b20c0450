@@ -1,0 +1,353 @@
+---
+title: Bootstrap System Reference
+description: Complete reference for the Rust compiler's bootstrap build system architecture and phases
+---
+
+## Overview
+
+The bootstrap build system is the foundation of Rust compiler development. It orchestrates the multi-stage compilation process, manages dependencies, and coordinates the build of the compiler, standard library, and tooling.
+
+## Architecture
+
+The bootstrap system is primarily implemented in Rust and lives in `src/bootstrap/`. It uses Cargo for individual component builds but handles the orchestration of multiple stages, artifact copying, and cross-compilation.
+
+### Key Components
+
+<CardGroup cols={2}>
+  <Card title="Entry Points" icon="terminal">
+    - `x` (Unix)
+    - `x.ps1` (Windows)
+    - `x.py` (cross-platform)
+  </Card>
+  
+  <Card title="Build System" icon="gear">
+    - Bootstrap binary (Rust)
+    - Stage management
+    - Artifact orchestration
+  </Card>
+</CardGroup>
+
+## Build Phases
+
+Bootstrap progresses through several distinct phases when building the compiler:
+
+### Phase 1: Entry Point Execution
+
+The entry point script performs initial setup:
+
+<Steps>
+  <Step title="Download Stage0">
+    Downloads the stage0 compiler and Cargo binaries from CI artifacts or distribution servers.
+  </Step>
+  
+  <Step title="Compile Bootstrap">
+    Compiles the bootstrap build system itself using the stage0 compiler.
+  </Step>
+  
+  <Step title="Invoke Bootstrap">
+    Executes the compiled bootstrap binary with user-provided arguments.
+  </Step>
+</Steps>
+
+### Phase 2: Configuration & Sanity Checks
+
+Bootstrap performs validation before building:
+
+```rust
+// Bootstrap reads configuration from bootstrap.toml
+// and performs sanity checks
+- Verify toolchain availability
+- Check required paths exist
+- Validate target configurations
+- Parse command-line flags
+```
+
+### Phase 3: Multi-Stage Compilation
+
+The compiler is built through multiple stages:
+
+<Accordion title="Stage 0: Downloaded Compiler">
+  The stage0 compiler is downloaded from CI. This is a stable, pre-built compiler used to bootstrap the build process.
+  
+  **Location**: `build/x86_64-unknown-linux-gnu/stage0/`
+  
+  **Purpose**: Build the stage1 compiler and libraries
+</Accordion>
+
+<Accordion title="Stage 1: Initial Build">
+  The stage1 compiler is built using stage0:
+  
+  - Stage0 compiler builds stage1 compiler
+  - Stage1 compiler links against stage0 standard library
+  - Stage1 compiler then builds stage1 standard library
+  
+  **Location**: `build/x86_64-unknown-linux-gnu/stage1/`
+  
+  **Purpose**: Build the stage2 compiler (the "real" compiler)
+</Accordion>
+
+<Accordion title="Stage 2: Production Build">
+  The stage2 compiler is the primary output:
+  
+  - Stage1 compiler builds stage2 compiler
+  - Stage2 compiler links against stage1 standard library
+  - This is typically what gets distributed
+  
+  **Location**: `build/x86_64-unknown-linux-gnu/stage2/`
+  
+  **Purpose**: Final compiler artifacts for distribution or testing
+</Accordion>
+
+<Accordion title="Stage 3+: Verification (Optional)">
+  Additional stages can be built for verification:
+  
+  - Verifies reproducibility
+  - Compares stage2 and stage3 outputs
+  - Used in release process
+  
+  **Configuration**: Set `build.full-bootstrap = true`
+</Accordion>
+
+## Directory Structure
+
+Bootstrap organizes all build artifacts under the `build/` directory:
+
+```
+build/
+├── cache/              # Downloaded stage0 tarballs
+│   ├── 2024-01-15/
+│   └── 2024-02-20/
+├── bootstrap/          # Bootstrap binary itself
+│   ├── debug/
+│   └── release/
+├── misc-tools/         # Host-only tools (built with stage0)
+│   ├── bin/
+│   └── target/
+├── node_modules/       # JS dependencies for tests
+├── dist/               # Distribution artifacts
+└── x86_64-unknown-linux-gnu/  # Per-target output
+    ├── stage0/         # Stage0 compiler artifacts
+    ├── stage1/         # Stage1 compiler & stdlib
+    ├── stage2/         # Stage2 compiler & stdlib
+    ├── llvm/           # LLVM build artifacts
+    └── compiler-rt/    # Compiler runtime libraries
+```
+
+## Stage Artifacts
+
+Each stage produces specific artifacts:
+
+<ParamField path="compiler" type="directory">
+  Contains the rustc binary and supporting files:
+  - `bin/rustc` - The compiler executable
+  - `lib/rustlib/` - Target-specific libraries
+  - `lib/librustc_driver.so` - Compiler driver library
+</ParamField>
+
+<ParamField path="library" type="directory">
+  Standard library and core components:
+  - `lib/libstd.rlib` - Standard library
+  - `lib/libcore.rlib` - Core library
+  - `lib/liballoc.rlib` - Allocation library
+  - `lib/libproc_macro.rlib` - Procedural macro support
+</ParamField>
+
+<ParamField path="tools" type="directory">
+  Development tools:
+  - `bin/cargo` - Package manager
+  - `bin/rustdoc` - Documentation generator
+  - `bin/clippy-driver` - Linter
+  - `bin/rustfmt` - Code formatter
+</ParamField>
+
+## Configuration System
+
+Bootstrap is configured via `bootstrap.toml` (or `config.toml` for backward compatibility):
+
+<CodeGroup>
+
+```toml bootstrap.toml
+# Profile selection
+profile = "compiler"
+
+[llvm]
+download-ci-llvm = true
+
+[build]
+build-stage = 2
+doc-stage = 2
+verbose = 1
+
+[rust]
+debug = false
+optimize = true
+codegen-backends = ["llvm"]
+```
+
+```sh Generate Config
+# Interactive configuration
+./x.py setup
+
+# Or manually copy example
+cp bootstrap.example.toml bootstrap.toml
+```
+
+</CodeGroup>
+
+## Optimization Strategies
+
+### Download CI LLVM
+
+The most significant time-saver for development:
+
+```toml
+[llvm]
+download-ci-llvm = true
+```
+
+<Info>
+  This downloads pre-built LLVM from CI instead of building it locally, saving 30-60 minutes on first build.
+</Info>
+
+### Keep Stage Artifacts
+
+Prevent recompilation of unchanged stages:
+
+```bash
+# Keep stage0 artifacts
+./x.py build --keep-stage 0
+
+# Keep both stage0 and stage1
+./x.py build --keep-stage 0 --keep-stage 1
+```
+
+### Incremental Builds
+
+Enable incremental compilation:
+
+```toml
+[rust]
+incremental = true
+```
+
+## Environment Variables
+
+Bootstrap respects several environment variables:
+
+<ParamField path="RUST_BOOTSTRAP_CONFIG" type="path">
+  Path to configuration file (overrides default search)
+</ParamField>
+
+<ParamField path="RUSTUP_DIST_SERVER" type="url">
+  Override the dist server for downloading stage0
+</ParamField>
+
+<ParamField path="BOOTSTRAP_TRACING" type="flag">
+  Enable tracing output for bootstrap execution
+</ParamField>
+
+<ParamField path="RUSTC_BOOTSTRAP" type="flag">
+  Enable unstable features in bootstrap compilation
+</ParamField>
+
+<ParamField path="CARGO_BUILD_TARGET" type="string">
+  Set the target triple (note: can break bootstrap build)
+</ParamField>
+
+## Python Requirements
+
+Bootstrap requires Python 3.6 or later:
+
+- Entry point scripts are written in Python
+- Python handles initial setup and stage0 download
+- Bootstrap binary itself is pure Rust
+
+<Warning>
+  Python 2 is no longer supported. The build system will attempt to find Python 3 automatically.
+</Warning>
+
+## Cross-Compilation
+
+Bootstrap supports cross-compilation with proper configuration:
+
+```toml
+[build]
+# Build triple (machine running the build)
+build = "x86_64-unknown-linux-gnu"
+
+# Host triples (machines that will run the compiler)
+host = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+
+# Target triples (machines the compiler will target)
+target = [
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "wasm32-wasip1"
+]
+```
+
+## Parallel Execution
+
+Control build parallelism:
+
+```bash
+# Use all available cores
+./x.py build -j $(nproc)
+
+# Limit to 4 jobs
+./x.py build -j 4
+```
+
+```toml
+[build]
+# Configure in bootstrap.toml
+jobs = 8
+```
+
+## Troubleshooting
+
+### Clean Builds
+
+```bash
+# Clean everything
+./x.py clean
+
+# Clean specific stage
+./x.py clean --stage 1
+
+# Clean without removing stage0
+./x.py clean --stage 1 --stage 2
+```
+
+### Verbose Output
+
+```bash
+# Basic verbose mode
+./x.py build -v
+
+# Very verbose (includes cargo output)
+./x.py build -vv
+
+# Extremely verbose (includes rustc invocations)
+./x.py build -vvv
+```
+
+### Debug Bootstrap Itself
+
+```bash
+# Enable bootstrap tracing
+export BOOTSTRAP_TRACING=1
+./x.py build
+```
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="x.py Reference" icon="terminal" href="/reference/x-py">
+    Learn about x.py commands and options
+  </Card>
+  
+  <Card title="Configuration Options" icon="sliders" href="/reference/configuration-options">
+    Explore all bootstrap.toml options
+  </Card>
+</CardGroup>

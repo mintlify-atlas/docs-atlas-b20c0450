@@ -1,0 +1,127 @@
+---
+title: "Contributing Overview"
+description: "Learn how to contribute to the Rust compiler project and get involved in Rust development"
+---
+
+Thank you for your interest in contributing to Rust! There are many ways to contribute and we appreciate all of them.
+
+## Getting Started
+
+The best way to get started is by asking for help in the [#new members](https://rust-lang.zulipchat.com/#narrow/stream/122652-new-members) Zulip stream. We have extensive documentation on how to get started on your own, but the Zulip stream is the best place to *ask* for help.
+
+<Tip>
+New to Rust development? The rustc-dev-guide is your comprehensive resource for understanding how the compiler works and how to contribute effectively.
+</Tip>
+
+## Essential Resources
+
+<CardGroup cols={2}>
+  <Card title="rustc-dev-guide" icon="book" href="https://rustc-dev-guide.rust-lang.org/">
+    Documentation for contributing to the compiler or tooling
+  </Card>
+  <Card title="std-dev-guide" icon="book-open" href="https://std-dev-guide.rust-lang.org/">
+    Documentation for the standard library development
+  </Card>
+  <Card title="Rust Zulip" icon="comments" href="https://rust-lang.zulipchat.com">
+    Chat platform for getting help and finding mentors
+  </Card>
+  <Card title="Internals Forum" icon="message-lines" href="https://internals.rust-lang.org">
+    Discuss Rust internals and development
+  </Card>
+</CardGroup>
+
+## Understanding the Ecosystem
+
+The [rustc-dev-guide](https://rustc-dev-guide.rust-lang.org/) is meant to help document how rustc (the Rust compiler) works, as well as to help new contributors get involved in rustc development. It is recommended that you read and understand the rustc-dev-guide before making a contribution.
+
+<Note>
+The guide talks about the different bots in the Rust ecosystem, the Rust development tools, bootstrapping, the compiler architecture, source code representation, and more.
+</Note>
+
+### Key Topics Covered
+
+- **Bots and Automation**: Understanding the various bots like bors that manage the Rust development workflow
+- **Development Tools**: Learning about `x.py`, the build system, and other essential tools
+- **Bootstrapping**: How the Rust compiler builds itself
+- **Compiler Architecture**: The structure and design of rustc
+- **Source Code Representation**: How Rust code is represented internally
+
+## Ways to Contribute
+
+### Code Contributions
+
+- Fix bugs and implement features in the compiler
+- Improve the standard library
+- Enhance tooling (Cargo, rustfmt, Clippy, rust-analyzer)
+- Add platform support
+
+### Non-Code Contributions
+
+- Improve documentation
+- Write tests
+- Triage issues
+- Review pull requests
+- Help others in the community
+
+## Working with Subtrees and Submodules
+
+<Warning>
+For submodules, changes need to be made against the repository corresponding to the submodule, and not the main `rust-lang/rust` repository.
+</Warning>
+
+For subtrees, prefer sending a PR against the subtree's repository if it does not need to be made against the main `rust-lang/rust` repository (e.g., a rustc-dev-guide change that does not accompany a compiler change).
+
+## Getting Help
+
+There are multiple platforms where you can get help when you're stuck:
+
+### Rust Zulip (Recommended)
+
+The [Rust Zulip](https://rust-lang.zulipchat.com) is the recommended platform for asking questions. Key streams include:
+
+- **#new members**: Perfect for newcomers
+- **#t-compiler**: Compiler development discussions
+- **#contribute**: General contribution questions
+
+### Internals Forum
+
+The [Rust Internals](https://internals.rust-lang.org) forum is great for longer-form discussions and RFCs.
+
+<Tip>
+You can learn more about asking questions and getting help in the [Asking Questions](https://rustc-dev-guide.rust-lang.org/getting-started.html#asking-questions) chapter of the rustc-dev-guide.
+</Tip>
+
+## Bug Reports
+
+Did a compiler error message tell you to come here? If you want to create an ICE (Internal Compiler Error) report:
+
+<Steps>
+  <Step title="Gather Information">
+    Collect the error message, your Rust version, and a minimal reproducible example
+  </Step>
+  <Step title="Check Existing Issues">
+    Search the [issue tracker](https://github.com/rust-lang/rust/issues) to see if it's already reported
+  </Step>
+  <Step title="Open an Issue">
+    Use the [issue template](https://github.com/rust-lang/rust/issues/new/choose) to create a detailed bug report
+  </Step>
+</Steps>
+
+For more details, refer to the [bug reports section](https://rustc-dev-guide.rust-lang.org/contributing.html#bug-reports) in the rustc-dev-guide.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Development Setup" icon="wrench" href="/contributing/setup">
+    Set up your development environment
+  </Card>
+  <Card title="Contribution Workflow" icon="code-branch" href="/contributing/workflow">
+    Learn the workflow for submitting changes
+  </Card>
+  <Card title="Testing Guidelines" icon="flask" href="/contributing/testing">
+    Understand how to write and run tests
+  </Card>
+  <Card title="Code of Conduct" icon="handshake" href="https://github.com/rust-lang/rust/blob/master/CODE_OF_CONDUCT.md">
+    Review our community standards
+  </Card>
+</CardGroup>

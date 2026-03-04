@@ -1,0 +1,431 @@
+---
+title: Code Generation
+description: Translating MIR to machine code through LLVM and other backends
+---
+
+Code generation is the final phase of compilation where MIR (Mid-level Intermediate Representation) is translated into executable machine code. The Rust compiler supports multiple codegen backends, with LLVM being the primary and most mature option.
+
+## Codegen Architecture
+
+The compiler's codegen infrastructure is split into backend-agnostic and backend-specific components:
+
+<Info>
+The `rustc_codegen_ssa` crate provides backend-agnostic code generation infrastructure, defining traits and common functionality that all codegen backends must implement.
+</Info>
+
+### Backend-Agnostic Layer (`rustc_codegen_ssa`)
+
+This crate defines the interface that all backends must implement:
+
+```rust
+pub trait CodegenBackend {
+    /// Compile a single codegen unit
+    fn compile_codegen_unit(
+        &self,
+        tcx: TyCtxt<'_>,
+        cgu_name: Symbol,
+    ) -> (ModuleCodegen<Self::Module>, u64);
+    
+    /// Create a target machine factory
+    fn target_machine_factory(
+        &self,
+        sess: &Session,
+        optlvl: OptLevel,
+        target_features: &[String],
+    ) -> TargetMachineFactoryFn<Self>;
+    
+    /// Join compiled modules
+    fn join_codegen(
+        &self,
+        ongoing_codegen: Box<dyn Any>,
+        sess: &Session,
+        outputs: &OutputFilenames,
+    ) -> Result<(CompiledModules, ProfQueriesMsg), ErrorGuaranteed>;
+    
+    // ... more methods
+}
+```
+
+### Available Backends
+
+<Steps>
+  <Step title="LLVM (rustc_codegen_llvm)">
+    The default and most mature backend. Produces highly optimized code for many platforms.
+  </Step>
+  
+  <Step title="Cranelift (rustc_codegen_cranelift)">
+    A fast code generator focused on compilation speed rather than runtime performance. Useful for debug builds.
+  </Step>
+  
+  <Step title="GCC (rustc_codegen_gcc)">
+    An experimental backend using GCC as the code generator, enabling Rust on platforms GCC supports.
+  </Step>
+</Steps>
+
+## LLVM Backend
+
+The `rustc_codegen_llvm` crate implements code generation using LLVM:
+
+```rust
+#[derive(Clone)]
+pub struct LlvmCodegenBackend(());
+
+impl ExtraBackendMethods for LlvmCodegenBackend {
+    fn compile_codegen_unit(
+        &self,
+        tcx: TyCtxt<'_>,
+        cgu_name: Symbol,
+    ) -> (ModuleCodegen<ModuleLlvm>, u64) {
+        base::compile_codegen_unit(tcx, cgu_name)
+    }
+    
+    fn target_machine_factory(
+        &self,
+        sess: &Session,
+        optlvl: OptLevel,
+        target_features: &[String],
+    ) -> TargetMachineFactoryFn<Self> {
+        back::write::target_machine_factory(sess, optlvl, target_features)
+    }
+    
+    // ... more implementations
+}
+```
+
+### LLVM IR Generation
+
+MIR is translated to LLVM IR through several steps:
+
+<Accordion title="Monomorphization">
+  Generic functions are instantiated with concrete types. The `rustc_monomorphize` crate handles this, creating separate versions of generic functions for each concrete type combination used.
+</Accordion>
+
+<Accordion title="MIR to LLVM IR Translation">
+  Each MIR basic block is translated to LLVM basic blocks, and MIR statements/terminators become LLVM instructions.
+</Accordion>
+
+<Accordion title="Type Lowering">
+  Rust types are mapped to LLVM types. This includes handling representation optimizations like niche filling for enums.
+</Accordion>
+
+<Accordion title="ABI Handling">
+  The `abi` module handles calling conventions and argument passing according to platform ABIs.
+</Accordion>
+
+## Codegen Units
+
+Code is divided into compilation units (CGUs) for parallel compilation:
+
+```rust
+pub fn compile_codegen_unit(
+    tcx: TyCtxt<'_>,
+    cgu_name: Symbol,
+) -> (ModuleCodegen<ModuleLlvm>, u64) {
+    // Compile a single codegen unit:
+    // 1. Create LLVM module
+    // 2. Generate code for all items in the CGU
+    // 3. Run LLVM optimization passes
+    // 4. Return compiled module
+}
+```
+
+<Note>
+Codegen units are compiled in parallel to speed up compilation. The number of CGUs can be controlled with the `-C codegen-units=N` flag.
+</Note>
+
+## Translation Process
+
+Here's how MIR translates to LLVM IR:
+
+### Basic Blocks
+
+```rust
+// MIR basic block:
+bb0: {
+    _3 = Add(_1, _2);
+    _0 = _3;
+    return;
+}
+
+// Becomes LLVM IR:
+// bb0:
+//   %3 = add i32 %1, %2
+//   store i32 %3, i32* %0
+//   ret i32 %3
+```
+
+### Function Calls
+
+```rust
+// MIR call:
+Call {
+    func: const foo,
+    args: [_1, _2],
+    destination: _0,
+    target: Some(bb1),
+}
+
+// Becomes LLVM IR:
+// %result = call i32 @foo(i32 %1, i32 %2)
+// store i32 %result, i32* %0
+// br label %bb1
+```
+
+### Control Flow
+
+```rust
+// MIR switch:
+switchInt(_1) -> [0: bb1, 1: bb2, otherwise: bb3]
+
+// Becomes LLVM IR:
+// switch i32 %1, label %bb3 [
+//   i32 0, label %bb1
+//   i32 1, label %bb2
+// ]
+```
+
+## Type Translation
+
+Rust types are mapped to LLVM types:
+
+<CardGroup cols={2}>
+  <Card title="Integers">
+    `i32` → `i32`, `u64` → `i64`, etc.
+  </Card>
+  <Card title="Pointers">
+    References and raw pointers → LLVM pointers
+  </Card>
+  <Card title="Structs">
+    Structs → LLVM struct types with appropriate layout
+  </Card>
+  <Card title="Enums">
+    Enums → Tagged unions or optimized representations
+  </Card>
+</CardGroup>
+
+### Enum Optimizations
+
+The compiler applies sophisticated optimizations to enums:
+
+```rust
+// Option<&T> has the same size as &T!
+// Null pointer represents None, non-null represents Some
+enum Option<T> {
+    None,
+    Some(T),
+}
+
+// In LLVM: Just a pointer, using null as discriminant
+// %Option = type { i8* }
+```
+
+## Optimization Levels
+
+LLVM optimization is controlled by the `-C opt-level` flag:
+
+<Steps>
+  <Step title="-C opt-level=0">
+    No optimizations. Fast compilation, slow runtime. Used for debug builds.
+  </Step>
+  
+  <Step title="-C opt-level=1">
+    Basic optimizations. Reasonable compromise between compile time and runtime.
+  </Step>
+  
+  <Step title="-C opt-level=2">
+    Default for release builds. Extensive optimizations without excessive compile time.
+  </Step>
+  
+  <Step title="-C opt-level=3">
+    Maximum optimization. May increase compile time significantly.
+  </Step>
+  
+  <Step title="-C opt-level=s">
+    Optimize for size instead of speed.
+  </Step>
+  
+  <Step title="-C opt-level=z">
+    Aggressively optimize for size.
+  </Step>
+</Steps>
+
+## Link-Time Optimization (LTO)
+
+LTO performs whole-program optimization:
+
+```bash
+# Enable thin LTO (faster, less memory)
+rustc -C lto=thin main.rs
+
+# Enable fat LTO (slower, more optimization)
+rustc -C lto=fat main.rs
+```
+
+<Info>
+Thin LTO provides most of the benefits of LTO with significantly reduced compilation time and memory usage compared to fat LTO.
+</Info>
+
+### LTO Modes
+
+<Accordion title="No LTO (default)">
+  Each codegen unit is optimized independently. Fast compilation but less optimization.
+</Accordion>
+
+<Accordion title="Thin LTO">
+  LLVM performs lightweight cross-module optimization. Good balance of compile time and runtime performance.
+</Accordion>
+
+<Accordion title="Fat LTO">
+  Full program optimization across all codegen units. Slowest compilation but maximum optimization.
+</Accordion>
+
+## Debugging Information
+
+The compiler can emit debugging information for debuggers:
+
+```rust
+// The debuginfo module handles:
+// - DWARF debug info generation
+// - Source location mapping
+// - Variable name preservation
+// - Type information for debuggers
+```
+
+```bash
+# Control debug info level
+rustc -C debuginfo=0  # No debug info
+rustc -C debuginfo=1  # Line tables only
+rustc -C debuginfo=2  # Full debug info (default for dev)
+```
+
+## Target Selection
+
+The compiler supports many target platforms:
+
+```bash
+# List all targets
+rustc --print target-list
+
+# Compile for a specific target
+rustc --target x86_64-unknown-linux-gnu main.rs
+rustc --target wasm32-unknown-unknown lib.rs
+rustc --target aarch64-apple-darwin main.rs
+```
+
+<Note>
+Target specifications are defined in `rustc_target` and include:
+- Architecture (x86_64, aarch64, wasm32, etc.)
+- Operating system (linux, windows, macos, none)
+- ABI and calling conventions
+- Supported features and optimizations
+</Note>
+
+## Inline Assembly
+
+The compiler supports inline assembly via the `asm!` macro:
+
+```rust
+use std::arch::asm;
+
+let result: u64;
+unsafe {
+    asm!(
+        "mov {}, 5",
+        out(reg) result,
+    );
+}
+```
+
+The `asm` module in `rustc_codegen_llvm` handles translating inline assembly to LLVM inline asm.
+
+## Intrinsics
+
+Compiler intrinsics provide access to low-level operations:
+
+```rust
+// Intrinsics are special functions handled by the compiler:
+// - size_of::<T>()
+// - transmute::<T, U>()
+// - atomic operations
+// - SIMD operations
+// - Platform-specific operations
+```
+
+The `intrinsic` module maps Rust intrinsics to LLVM intrinsics or custom code.
+
+## Codegen Workflow
+
+The complete codegen workflow:
+
+<Steps>
+  <Step title="Collect Items">
+    Determine which items (functions, statics, etc.) need to be codegen'd
+  </Step>
+  
+  <Step title="Partition CGUs">
+    Divide items into codegen units for parallel compilation
+  </Step>
+  
+  <Step title="Monomorphization">
+    Instantiate generic functions with concrete types
+  </Step>
+  
+  <Step title="Generate LLVM IR">
+    Translate MIR to LLVM IR for each codegen unit
+  </Step>
+  
+  <Step title="Optimize">
+    Run LLVM optimization passes
+  </Step>
+  
+  <Step title="Emit Object Files">
+    Generate machine code and write object files
+  </Step>
+  
+  <Step title="Link">
+    Link object files into final executable or library
+  </Step>
+</Steps>
+
+## Performance Considerations
+
+<CardGroup cols={2}>
+  <Card title="Codegen Units">
+    More CGUs = faster compilation but less optimization. Fewer CGUs = better optimization but slower compilation.
+  </Card>
+  <Card title="LTO">
+    Enable for release builds when maximum performance is needed, despite longer compile times.
+  </Card>
+  <Card title="Target CPU">
+    Use `-C target-cpu=native` to optimize for your specific CPU.
+  </Card>
+  <Card title="Profile-Guided Optimization">
+    Use PGO to optimize based on actual runtime behavior.
+  </Card>
+</CardGroup>
+
+## Related Compiler Flags
+
+```bash
+# Codegen options
+rustc -C help  # List all codegen options
+
+# Common flags:
+-C opt-level=2           # Optimization level
+-C lto=thin             # Link-time optimization
+-C codegen-units=16     # Number of codegen units
+-C target-cpu=native    # Optimize for native CPU
+-C debuginfo=2          # Debug info level
+-C panic=abort          # Panic strategy
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MIR" href="/compiler/mir">
+    Learn about the MIR that feeds code generation
+  </Card>
+  <Card title="Incremental Compilation" href="/compiler/incremental">
+    Understand how the compiler optimizes rebuilds
+  </Card>
+</CardGroup>

@@ -1,0 +1,439 @@
+---
+title: Building on Unix-Like Systems
+description: Complete guide to building Rust from source on Linux, macOS, and other Unix-like systems
+---
+
+## Quick Start
+
+For experienced developers who want to get started quickly:
+
+```bash
+git clone https://github.com/rust-lang/rust.git
+cd rust
+./x.py setup
+./x.py build
+```
+
+<Note>
+For a detailed explanation and configuration options, continue reading below.
+</Note>
+
+## Prerequisites
+
+Before building, ensure you have all [required dependencies](/building/dependencies) installed.
+
+## Step-by-Step Build Process
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the Rust source code from GitHub:
+
+    ```bash
+    git clone https://github.com/rust-lang/rust.git
+    cd rust
+    ```
+
+    The repository is large (several GB), so cloning may take some time.
+
+    <Tip>
+    For faster cloning, use a shallow clone:
+    ```bash
+    git clone --depth 1 https://github.com/rust-lang/rust.git
+    ```
+    However, this is not recommended if you plan to contribute.
+    </Tip>
+  </Step>
+
+  <Step title="Configure the Build">
+    Choose one of the following configuration methods:
+
+    <Tabs>
+      <Tab title="Interactive Setup (Recommended)">
+        Run the interactive setup to configure your build profile:
+
+        ```bash
+        ./x.py setup
+        ```
+
+        You'll be prompted to select a profile:
+
+        - **library** - For contributing to the standard library
+        - **compiler** - For contributing to the compiler
+        - **codegen** - For contributing to code generation
+        - **tools** - For contributing to tools like Clippy or rustfmt
+        - **user** - For general usage and experimentation
+
+        The setup will also configure:
+        - LSP (Language Server Protocol) with rust-analyzer
+        - Git hooks for commit validation
+        - Editor integration
+      </Tab>
+
+      <Tab title="Configure Script">
+        Use the `configure` script for programmatic configuration:
+
+        ```bash
+        ./configure \
+          --enable-full-tools \
+          --enable-profiler \
+          --enable-sanitizers \
+          --set llvm.download-ci-llvm=true
+        ```
+
+        This generates a `bootstrap.toml` file with your settings.
+      </Tab>
+
+      <Tab title="Manual Configuration">
+        Create `bootstrap.toml` manually:
+
+        ```toml bootstrap.toml
+        [build]
+        # Use all CPU cores
+        jobs = 0
+
+        # Build extended tools
+        extended = true
+        tools = ["cargo", "clippy", "rustfmt", "rust-analyzer"]
+
+        [llvm]
+        # Download LLVM instead of building (much faster)
+        download-ci-llvm = "if-unchanged"
+
+        [rust]
+        # Development channel
+        channel = "dev"
+
+        # Enable debug assertions for better error messages
+        debug-assertions = true
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Build the Compiler">
+    Build Rust using the `x.py` script:
+
+    <Tabs>
+      <Tab title="Standard Build">
+        ```bash
+        ./x.py build
+        ```
+
+        This builds:
+        - The stage 1 compiler
+        - The standard library
+        - Core tools (if `extended = true`)
+
+        <Note>
+        First-time builds can take 30 minutes to several hours depending on your hardware and whether you're downloading or building LLVM.
+        </Note>
+      </Tab>
+
+      <Tab title="Stage 2 Build">
+        ```bash
+        ./x.py build --stage 2
+        ```
+
+        Builds the final, fully optimized compiler. This is slower but produces a production-ready compiler.
+      </Tab>
+
+      <Tab title="Specific Components">
+        ```bash
+        # Build only the standard library
+        ./x.py build library/std
+
+        # Build the compiler
+        ./x.py build compiler
+
+        # Build a specific tool
+        ./x.py build tools/cargo
+        ```
+      </Tab>
+
+      <Tab title="Parallel Build">
+        ```bash
+        # Use specific number of jobs
+        ./x.py build -j 4
+
+        # Use all available cores (default)
+        ./x.py build -j 0
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Install (Optional)">
+    Install the built compiler to your system:
+
+    ```bash
+    ./x.py install
+    ```
+
+    By default, this installs to `/usr/local`. Customize the installation directory:
+
+    <Tabs>
+      <Tab title="Using DESTDIR">
+        ```bash
+        export DESTDIR=/path/to/install
+        ./x.py install
+        ```
+      </Tab>
+
+      <Tab title="Using Configure">
+        ```bash
+        ./configure \
+          --set install.prefix=/opt/rust \
+          --set install.sysconfdir=/opt/rust/etc
+        ./x.py install
+        ```
+      </Tab>
+
+      <Tab title="Using bootstrap.toml">
+        ```toml bootstrap.toml
+        [install]
+        prefix = "/opt/rust"
+        sysconfdir = "/opt/rust/etc"
+        bindir = "bin"
+        libdir = "lib"
+        ```
+
+        Then run:
+        ```bash
+        ./x.py install
+        ```
+      </Tab>
+    </Tabs>
+
+    The installation includes:
+    - `rustc` - The Rust compiler
+    - `rustdoc` - Documentation generator
+    - `cargo` - Package manager (if `extended = true`)
+    - Additional tools based on your configuration
+
+    <Warning>
+    When `DESTDIR` is set, the `prefix` and `sysconfdir` values are combined with the `DESTDIR` path.
+    </Warning>
+  </Step>
+</Steps>
+
+## Advanced Configuration Examples
+
+<AccordionGroup>
+  <Accordion title="Cross-Compilation Setup">
+    Example configuration for cross-compiling to ARM64 Linux:
+
+    ```bash
+    ./configure \
+      --build=x86_64-unknown-linux-gnu \
+      --target=aarch64-unknown-linux-gnu \
+      --set target.aarch64-unknown-linux-gnu.linker=aarch64-linux-gnu-gcc
+    ```
+
+    Or in `bootstrap.toml`:
+
+    ```toml
+    [build]
+    build = "x86_64-unknown-linux-gnu"
+    target = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+
+    [target.aarch64-unknown-linux-gnu]
+    linker = "aarch64-linux-gnu-gcc"
+    ```
+  </Accordion>
+
+  <Accordion title="Optimized Development Build">
+    Configuration optimized for fast rebuilds during development:
+
+    ```toml bootstrap.toml
+    [llvm]
+    download-ci-llvm = true
+
+    [rust]
+    incremental = true
+    debug-assertions = true
+    debuginfo-level = 1
+
+    [build]
+    # Use ccache for faster rebuilds
+    ccache = true
+
+    # Don't build documentation
+    docs = false
+    ```
+  </Accordion>
+
+  <Accordion title="Production Release Build">
+    Configuration for building a production release:
+
+    ```bash
+    ./configure \
+      --enable-full-tools \
+      --enable-profiler \
+      --enable-sanitizers \
+      --enable-compiler-docs \
+      --set rust.debug-assertions=false \
+      --set rust.debuginfo-level=0 \
+      --set rust.codegen-units=1 \
+      --set llvm.thin-lto=true
+    ```
+  </Accordion>
+
+  <Accordion title="Custom LLVM Build">
+    Building with custom LLVM settings:
+
+    ```toml bootstrap.toml
+    [llvm]
+    # Build LLVM from source
+    download-ci-llvm = false
+
+    # Use Ninja for faster builds
+    ninja = true
+
+    # Enable ThinLTO for LLVM
+    thin-lto = true
+
+    # Link LLVM dynamically
+    link-shared = true
+
+    # Enable specific targets
+    targets = "X86;ARM;AArch64"
+
+    # Optimize LLVM build
+    optimize = true
+    release-debuginfo = false
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Using Configure and Make
+
+For those familiar with traditional Unix build systems:
+
+```bash
+./configure --prefix=/usr/local
+make && sudo make install
+```
+
+<Note>
+The `Makefile` is a wrapper around `x.py`. We recommend using `x.py` directly for better control and error messages.
+</Note>
+
+## Testing Your Build
+
+After building, verify everything works:
+
+<CodeGroup>
+```bash Quick Check
+./x.py check
+```
+
+```bash Run Tests
+# Run all tests (takes a long time)
+./x.py test
+
+# Run specific test suite
+./x.py test tests/ui
+
+# Test the standard library
+./x.py test library/std
+```
+
+```bash Try Built Compiler
+# Use the stage 1 compiler
+./build/x86_64-unknown-linux-gnu/stage1/bin/rustc --version
+
+# Compile a test program
+./build/x86_64-unknown-linux-gnu/stage1/bin/rustc hello.rs
+./hello
+```
+</CodeGroup>
+
+## Building Documentation
+
+Build the Rust documentation:
+
+```bash
+# Build all documentation
+./x.py doc
+
+# Build standard library docs
+./x.py doc library/std
+
+# Build compiler docs
+./x.py doc compiler
+```
+
+Documentation is generated in `build/<target>/doc` directory.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Build Fails: Out of Memory">
+    LLVM compilation is memory-intensive. Solutions:
+
+    1. Use pre-built LLVM:
+    ```toml
+    [llvm]
+    download-ci-llvm = true
+    ```
+
+    2. Reduce parallel jobs:
+    ```bash
+    ./x.py build -j 1
+    ```
+
+    3. Limit linker jobs:
+    ```toml
+    [llvm]
+    link-jobs = 1
+    ```
+  </Accordion>
+
+  <Accordion title="Build is Very Slow">
+    Speed up builds:
+
+    1. Download LLVM instead of building
+    2. Use Ninja instead of Make for LLVM
+    3. Enable ccache
+    4. Disable documentation builds
+    5. Use incremental compilation
+
+    ```toml bootstrap.toml
+    [llvm]
+    download-ci-llvm = true
+    ninja = true
+
+    [build]
+    ccache = true
+    docs = false
+
+    [rust]
+    incremental = true
+    ```
+  </Accordion>
+
+  <Accordion title="Submodule Errors">
+    Update git submodules:
+
+    ```bash
+    git submodule update --init --recursive
+    ```
+
+    Or let bootstrap manage them:
+    ```toml
+    [build]
+    submodules = true
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration Options" icon="sliders" href="/building/configuration">
+    Explore all available configuration options
+  </Card>
+  <Card title="Rustc Dev Guide" icon="book" href="https://rustc-dev-guide.rust-lang.org/">
+    Learn about compiler internals and contributing
+  </Card>
+</CardGroup>

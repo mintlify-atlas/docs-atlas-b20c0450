@@ -1,0 +1,388 @@
+---
+title: Rustfmt
+description: Tool for formatting Rust code according to style guidelines
+---
+
+Rustfmt is the official code formatter for Rust. It automatically formats Rust code according to style guidelines, ensuring consistent code style across projects.
+
+## Overview
+
+Rustfmt takes Rust code and reformats it according to the [Rust Style Guide](https://doc.rust-lang.org/nightly/style-guide/), which has been formalized through the [style RFC process](https://github.com/rust-dev-tools/fmt-rfcs).
+
+<Note>
+Rustfmt requires Rust 1.24 or above and works with both stable and nightly toolchains. The nightly version provides additional unstable features and configuration options.
+</Note>
+
+## Installation
+
+### On Stable Toolchain
+
+<Steps>
+  <Step title="Add rustfmt component">
+    ```bash
+    rustup component add rustfmt
+    ```
+  </Step>
+  
+  <Step title="Run on your project">
+    ```bash
+    cargo fmt
+    ```
+  </Step>
+</Steps>
+
+### On Nightly Toolchain
+
+For the latest features:
+
+```bash
+# Install
+rustup component add rustfmt --toolchain nightly
+
+# Run
+cargo +nightly fmt
+```
+
+## Usage
+
+### With Cargo
+
+```bash
+# Format all files in the current crate
+cargo fmt
+
+# Check if files are formatted (CI mode)
+cargo fmt --check
+
+# Format all crates in a workspace
+cargo fmt --all
+
+# See what would be changed without modifying files
+cargo fmt -- --check
+```
+
+### Running rustfmt Directly
+
+```bash
+# Format specific files
+rustfmt lib.rs main.rs
+
+# Format code from stdin
+echo "fn     main() {}" | rustfmt
+
+# Output: fn main() {}
+```
+
+### Verify Mode
+
+```bash
+# Exit with code 0 if formatted, 1 if changes needed
+rustfmt --check src/lib.rs
+
+# Same with cargo
+cargo fmt --all -- --check
+```
+
+<Tip>
+Use `--check` mode in CI to ensure all code is properly formatted before merging.
+</Tip>
+
+## Configuration
+
+Rustfmt is highly configurable through configuration files.
+
+### Configuration Files
+
+Create a `rustfmt.toml` or `.rustfmt.toml` in your project directory:
+
+```toml
+# rustfmt.toml
+max_width = 100
+hard_tabs = false
+tab_spaces = 4
+newline_style = "Unix"
+indent_style = "Block"
+use_small_heuristics = "Default"
+fn_call_width = 60
+attr_fn_like_width = 70
+struct_lit_width = 18
+struct_variant_width = 35
+array_width = 60
+chain_width = 60
+single_line_if_else_max_width = 50
+```
+
+### View Available Options
+
+```bash
+# See all configuration options
+rustfmt --help=config
+
+# Generate a config file with defaults
+rustfmt --print-config default rustfmt.toml
+```
+
+### Stable vs Unstable Options
+
+- **Stable options**: Available on stable Rust, guaranteed to remain compatible
+- **Unstable options**: Only on nightly, may change or be removed
+
+View configuration visually at [rust-lang.github.io/rustfmt/](https://rust-lang.github.io/rustfmt/).
+
+## Edition Configuration
+
+### Rust Editions
+
+The `edition` option determines parsing compatibility:
+
+```toml
+# rustfmt.toml
+edition = "2021"
+```
+
+When using `cargo fmt`, the edition is automatically read from `Cargo.toml`.
+
+### Style Editions
+
+Style editions control formatting behavior:
+
+```toml
+# rustfmt.toml
+style_edition = "2024"
+```
+
+<Warning>
+To ensure consistent formatting between `rustfmt` and `cargo fmt`, explicitly configure both `edition` and `style_edition` in `rustfmt.toml`.
+</Warning>
+
+## Skipping Code Sections
+
+### Skip Entire Items
+
+```rust
+#[rustfmt::skip]
+fn unformatted_function() {
+    // This function won't be formatted
+    let   x   =   5;
+}
+```
+
+### Skip Macros
+
+```rust
+#![rustfmt::skip::macros(html)]
+
+fn main() {
+    let result = html! { <div>
+        Unformatted HTML</div>
+    };
+}
+```
+
+### Skip Attributes
+
+```rust
+#![rustfmt::skip::attributes(custom_attribute)]
+
+#[custom_attribute(formatting , here , should , be , skipped)]
+fn my_function() {}
+```
+
+## Building from Source
+
+Rustfmt is located at `src/tools/rustfmt/` in the Rust repository.
+
+### Package Configuration
+
+From `src/tools/rustfmt/Cargo.toml`:
+
+```toml
+[package]
+name = "rustfmt-nightly"
+version = "1.9.0"
+description = "Tool to find and fix Rust formatting issues"
+edition = "2021"
+
+[[bin]]
+name = "rustfmt"
+path = "src/bin/main.rs"
+
+[[bin]]
+name = "cargo-fmt"
+path = "src/cargo-fmt/main.rs"
+
+[[bin]]
+name = "rustfmt-format-diff"
+path = "src/format-diff/main.rs"
+
+[[bin]]
+name = "git-rustfmt"
+path = "src/git-rustfmt/main.rs"
+```
+
+### Build Commands
+
+```bash
+# Build rustfmt
+cargo build
+
+# Run tests
+cargo test
+
+# Run rustfmt after building
+cargo run --bin rustfmt -- filename.rs
+
+# Or use the bootstrap system
+./x build rustfmt
+./x test rustfmt
+```
+
+## CI Integration
+
+### GitHub Actions
+
+```yaml
+name: Rustfmt
+on: [push, pull_request]
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+          override: true
+      - run: cargo fmt --all -- --check
+```
+
+### Travis CI
+
+```yaml
+language: rust
+before_script:
+  - rustup component add rustfmt
+script:
+  - cargo build
+  - cargo test
+  - cargo fmt --all -- --check
+```
+
+<Tip>
+Using `--check` instructs rustfmt to exit with an error code if formatting changes are needed, perfect for CI environments.
+</Tip>
+
+## Editor Integration
+
+Rustfmt integrates with popular editors:
+
+<CardGroup cols={2}>
+  <Card title="VS Code" icon="code">
+    Use the rust-analyzer extension with format-on-save enabled.
+  </Card>
+  
+  <Card title="Vim" icon="terminal">
+    Use rust.vim with `:RustFmt` command.
+  </Card>
+  
+  <Card title="Emacs" icon="keyboard">
+    Use rust-mode with automatic formatting on save.
+  </Card>
+  
+  <Card title="IntelliJ/CLion" icon="laptop-code">
+    Built-in Rust plugin supports rustfmt.
+  </Card>
+</CardGroup>
+
+## Output Formats
+
+Rustfmt supports multiple output formats:
+
+```bash
+# Write changes to files (default)
+cargo fmt -- --emit files
+
+# Write to stdout
+cargo fmt -- --emit stdout
+
+# Coverage report (nightly only)
+cargo +nightly fmt -- --emit coverage
+
+# Checkstyle format (nightly only)
+cargo +nightly fmt -- --emit checkstyle
+
+# JSON diff format (nightly only)
+cargo +nightly fmt -- --emit json
+```
+
+| Format | Description | Nightly Only |
+|--------|-------------|-------------|
+| `files` | Overwrites files in place | No |
+| `stdout` | Writes output to stdout | No |
+| `coverage` | Shows formatting coverage | Yes |
+| `checkstyle` | Checkstyle XML format | Yes |
+| `json` | JSON diff format | Yes |
+
+## Common Configuration Examples
+
+### Project-Specific Style
+
+```toml
+# rustfmt.toml - Wider lines for specific project
+max_width = 120
+use_small_heuristics = "Max"
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+```
+
+### Format Imports
+
+```toml
+# Organize imports (unstable, nightly only)
+imports_granularity = "Crate"  # or "Module", "Item", "One"
+group_imports = "StdExternalCrate"
+reorder_imports = true
+```
+
+### Custom Line Width
+
+```toml
+max_width = 100
+fn_call_width = 80
+struct_lit_width = 40
+```
+
+## Limitations
+
+Rustfmt has some known limitations:
+
+- Code must parse correctly (macro expansion must succeed)
+- Some macro declarations and uses may not format perfectly
+- Comments are generally preserved but formatting may change
+- Non-ASCII Unicode characters are mostly supported but not exhaustively tested
+
+<Note>
+Rustfmt tries to work on as much code as possible, even code that doesn't compile. However, stability guarantees only apply to parseable, complete programs.
+</Note>
+
+## Custom Environment Variables
+
+You can specify a custom rustfmt binary:
+
+```bash
+export RUSTFMT=/path/to/custom/rustfmt
+cargo fmt
+```
+
+<Warning>
+This requires `cargo fmt` version 1.4.22 or newer.
+</Warning>
+
+## Resources
+
+- **Official GitHub**: [github.com/rust-lang/rustfmt](https://github.com/rust-lang/rustfmt)
+- **Configuration Guide**: [rust-lang.github.io/rustfmt/](https://rust-lang.github.io/rustfmt/)
+- **Rust Style Guide**: [doc.rust-lang.org/nightly/style-guide/](https://doc.rust-lang.org/nightly/style-guide/)
+- **Source Code**: `src/tools/rustfmt/` in the Rust repository

@@ -1,0 +1,357 @@
+---
+title: Frontend (Parsing & AST)
+description: Lexical analysis, parsing, and Abstract Syntax Tree construction in rustc
+---
+
+The frontend of the Rust compiler transforms source code text into structured data that the rest of the compiler can analyze. This involves lexical analysis (tokenization), parsing, and AST construction.
+
+## Lexical Analysis
+
+The `rustc_lexer` crate performs tokenization without any dependencies on the rest of the compiler:
+
+<Info>
+The lexer is intentionally kept simple and standalone. It produces a stream of tokens with minimal semantic analysis, making it reusable for other tools like syntax highlighters.
+</Info>
+
+### Token Types
+
+Tokens represent the basic elements of Rust syntax:
+
+```rust
+use rustc_ast::token;
+
+// Common token types:
+// - Keywords: fn, let, mut, pub, etc.
+// - Identifiers: variable names, function names
+// - Literals: 42, "hello", 'c', 3.14
+// - Operators: +, -, *, /, =, ==, etc.
+// - Delimiters: {, }, (, ), [, ]
+```
+
+## The Parser
+
+The `rustc_parse` crate provides the main parser interface:
+
+```rust
+/// Creates a new parser from a source string
+pub fn new_parser_from_source_str(
+    psess: &ParseSess,
+    name: FileName,
+    source: String,
+    strip_tokens: StripTokens,
+) -> Result<Parser<'_>, Vec<Diag<'_>>>
+
+/// Creates a new parser from a file
+pub fn new_parser_from_file(
+    psess: &ParseSess,
+    path: &Path,
+    strip_tokens: StripTokens,
+) -> Result<Parser<'_>, Vec<Diag<'_>>>
+```
+
+### Parsing Process
+
+The parser implements a recursive descent parser that builds the AST:
+
+<Steps>
+  <Step title="Initialize Parser">
+    Create a parser instance from a source file or string
+  </Step>
+  
+  <Step title="Parse Crate Root">
+    Start parsing from the crate root, processing module-level items
+  </Step>
+  
+  <Step title="Build AST Nodes">
+    Recursively parse items, statements, expressions, and patterns
+  </Step>
+  
+  <Step title="Handle Errors">
+    Report parse errors with detailed diagnostics and attempt recovery
+  </Step>
+</Steps>
+
+## Abstract Syntax Tree (AST)
+
+The `rustc_ast` crate contains the AST definitions. The AST represents the syntactic structure of Rust code:
+
+<Note>
+The `rustc_ast` crate contains things concerned purely with syntax – the AST ("abstract syntax tree"), token streams, definitions for tokens, and shared definitions for other AST-related parts of the compiler.
+</Note>
+
+### Core AST Types
+
+```rust
+// Key AST node types:
+
+/// A parsed Rust item (function, struct, module, etc.)
+pub struct Item {
+    pub attrs: AttrVec,
+    pub id: NodeId,
+    pub span: Span,
+    pub vis: Visibility,
+    pub ident: Ident,
+    pub kind: ItemKind,
+    pub tokens: Option<LazyAttrTokenStream>,
+}
+
+/// Specific item types
+pub enum ItemKind {
+    ExternCrate,
+    Use,
+    Static,
+    Const,
+    Fn,
+    Mod,
+    ForeignMod,
+    GlobalAsm,
+    TyAlias,
+    Enum,
+    Struct,
+    Union,
+    Trait,
+    Impl,
+    MacCall,
+    MacroDef,
+}
+```
+
+### Expressions
+
+```rust
+/// A parsed Rust expression
+pub struct Expr {
+    pub id: NodeId,
+    pub kind: ExprKind,
+    pub span: Span,
+    pub attrs: AttrVec,
+    pub tokens: Option<LazyAttrTokenStream>,
+}
+
+pub enum ExprKind {
+    Array,
+    ConstBlock,
+    Call,
+    MethodCall,
+    Binary,
+    Unary,
+    Lit,
+    If,
+    While,
+    Loop,
+    Match,
+    Closure,
+    Block,
+    // ... and many more
+}
+```
+
+### Types
+
+```rust
+/// A parsed Rust type
+pub struct Ty {
+    pub id: NodeId,
+    pub kind: TyKind,
+    pub span: Span,
+    pub tokens: Option<LazyAttrTokenStream>,
+}
+
+pub enum TyKind {
+    Slice,
+    Array,
+    Ptr,
+    Ref,
+    Tup,
+    Path,
+    ImplTrait,
+    // ... and more
+}
+```
+
+### Patterns
+
+```rust
+/// A parsed Rust pattern (used in match arms, let bindings, etc.)
+pub struct Pat {
+    pub id: NodeId,
+    pub kind: PatKind,
+    pub span: Span,
+    pub tokens: Option<LazyAttrTokenStream>,
+}
+
+pub enum PatKind {
+    Wild,
+    Ident,
+    Struct,
+    TupleStruct,
+    Path,
+    Tuple,
+    Slice,
+    Lit,
+    Range,
+    // ... and more
+}
+```
+
+## AST Traversal
+
+The `visit` module provides visitor patterns for traversing the AST:
+
+```rust
+use rustc_ast::visit::{self, Visitor};
+
+struct MyVisitor;
+
+impl<'ast> Visitor<'ast> for MyVisitor {
+    fn visit_item(&mut self, item: &'ast Item) {
+        // Process this item
+        println!("Found item: {}", item.ident);
+        
+        // Continue visiting children
+        visit::walk_item(self, item);
+    }
+    
+    fn visit_expr(&mut self, expr: &'ast Expr) {
+        // Process this expression
+        
+        // Continue visiting children
+        visit::walk_expr(self, expr);
+    }
+}
+```
+
+## AST Mutation
+
+The `mut_visit` module provides tools for mutating the AST:
+
+```rust
+use rustc_ast::mut_visit::{self, MutVisitor};
+
+struct MyMutVisitor;
+
+impl MutVisitor for MyMutVisitor {
+    fn visit_expr(&mut self, expr: &mut P<Expr>) {
+        // Modify this expression
+        
+        // Continue visiting children
+        mut_visit::walk_expr(self, expr);
+    }
+}
+```
+
+<Note>
+AST mutation is primarily used during macro expansion and other early compiler passes. Later phases use immutable representations.
+</Note>
+
+## Paths
+
+Paths are fundamental to Rust's module system:
+
+```rust
+/// A "Path" is essentially Rust's notion of a name.
+/// E.g., `std::cmp::PartialEq`
+pub struct Path {
+    pub span: Span,
+    /// The segments in the path: the things separated by `::`
+    /// Global paths begin with `kw::PathRoot`
+    pub segments: ThinVec<PathSegment>,
+    pub tokens: Option<LazyAttrTokenStream>,
+}
+```
+
+## Lifetimes and Labels
+
+```rust
+/// A "Lifetime" is an annotation of the scope in which a variable
+/// can be used, e.g. `'a` in `&'a i32`
+pub struct Lifetime {
+    pub id: NodeId,
+    pub ident: Ident,
+}
+
+/// A "Label" is an identifier of some point in sources,
+/// e.g. in `'outer: loop { break 'outer; }`
+pub struct Label {
+    pub ident: Ident,
+}
+```
+
+## Example: Parsing a Simple Function
+
+Here's what happens when parsing a simple function:
+
+```rust
+// Source code:
+fn add(x: i32, y: i32) -> i32 {
+    x + y
+}
+
+// Becomes an AST like:
+// Item {
+//     kind: ItemKind::Fn(Box::new(Fn {
+//         sig: FnSig {
+//             decl: FnDecl {
+//                 inputs: [
+//                     Param { ty: Path("i32"), pat: Ident("x") },
+//                     Param { ty: Path("i32"), pat: Ident("y") },
+//                 ],
+//                 output: Ty(Path("i32")),
+//             },
+//         },
+//         body: Block {
+//             stmts: [
+//                 Expr(Binary {
+//                     op: Add,
+//                     lhs: Path("x"),
+//                     rhs: Path("y"),
+//                 }),
+//             ],
+//         },
+//     })),
+//     ident: "add",
+// }
+```
+
+## Error Recovery
+
+The parser implements sophisticated error recovery:
+
+<Accordion title="Partial Parsing">
+  When encountering syntax errors, the parser attempts to recover and continue parsing to find more errors in a single pass.
+</Accordion>
+
+<Accordion title="Diagnostic Quality">
+  Parse errors include detailed information about what was expected and what was found, with suggestions for fixes.
+</Accordion>
+
+<Accordion title="Resilient AST">
+  The AST can represent partially-invalid code, allowing tools like rust-analyzer to work with incomplete programs.
+</Accordion>
+
+## Next Steps
+
+After parsing, the AST undergoes several transformations:
+
+<Steps>
+  <Step title="Macro Expansion">
+    Macros are expanded, transforming macro calls into their expanded AST forms
+  </Step>
+  
+  <Step title="Name Resolution">
+    All names (variables, types, functions) are resolved to their definitions
+  </Step>
+  
+  <Step title="HIR Lowering">
+    The AST is lowered to HIR (High-level Intermediate Representation) for semantic analysis
+  </Step>
+</Steps>
+
+<CardGroup cols={2}>
+  <Card title="Compiler Overview" href="/compiler/overview">
+    Return to compiler architecture overview
+  </Card>
+  <Card title="MIR" href="/compiler/mir">
+    Learn about the Mid-level IR used for optimization
+  </Card>
+</CardGroup>

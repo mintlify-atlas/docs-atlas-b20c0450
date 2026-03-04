@@ -1,0 +1,424 @@
+---
+title: Alloc Library
+description: Smart pointers and collections for managing heap-allocated values in Rust
+---
+
+The Rust `alloc` library provides smart pointers and collections for managing heap-allocated values. This library is the middle layer between `core` (no allocation) and `std` (full standard library).
+
+<Note>
+The `alloc` library normally doesn't need to be used directly since its contents are re-exported in the `std` crate. However, `#![no_std]` crates that need heap allocation will use this crate.
+</Note>
+
+## Overview
+
+The alloc library provides:
+
+- **Smart pointers** for heap allocation
+- **Collections** for dynamic data structures
+- **Heap interfaces** for memory allocation
+- **String types** for owned text data
+
+### Requirements
+
+<Warning>
+This library requires:
+- A global allocator (use `#![needs_allocator]`)
+- Platform support for heap allocation
+- No support for `no_global_oom_handling` environments by default
+</Warning>
+
+## Smart Pointers
+
+### Box - Owned Heap Values
+
+<Accordion title="Box<T> - Single ownership">
+`Box` is a smart pointer type for heap allocation. There can only be one owner of a `Box`, and the owner can mutate the contents.
+
+```rust
+let boxed = Box::new(5);
+let x = *boxed; // Dereference to get value
+```
+
+**Key characteristics:**
+- Single ownership (not `Copy`, but `Clone` if `T: Clone`)
+- Same size as a pointer
+- Efficient for sending between threads
+- Ideal for tree-like data structures
+- Enables recursive types
+
+**Common use cases:**
+```rust
+// Recursive types
+enum List {
+    Cons(i32, Box<List>),
+    Nil,
+}
+
+// Large stack values
+let large_data = Box::new([0u8; 1_000_000]);
+
+// Trait objects
+let drawable: Box<dyn Draw> = Box::new(Button {});
+```
+</Accordion>
+
+### Rc - Reference Counting
+
+<Accordion title="Rc<T> - Shared ownership (single-threaded)">
+`Rc` is a reference-counted pointer type for sharing memory within a single thread. Multiple `Rc` pointers can reference the same data.
+
+```rust
+use alloc::rc::Rc;
+
+let rc1 = Rc::new(5);
+let rc2 = Rc::clone(&rc1);
+assert_eq!(Rc::strong_count(&rc1), 2);
+```
+
+**Key characteristics:**
+- Multiple ownership through reference counting
+- Only provides shared references (`&T`)
+- Not thread-safe (not `Send` or `Sync`)
+- Cloning is cheap (increments counter)
+- Automatically deallocates when last reference drops
+
+**Interior mutability pattern:**
+```rust
+use alloc::rc::Rc;
+use core::cell::RefCell;
+
+let shared = Rc::new(RefCell::new(5));
+*shared.borrow_mut() += 1;
+```
+</Accordion>
+
+### Arc - Atomic Reference Counting
+
+<Accordion title="Arc<T> - Shared ownership (thread-safe)">
+`Arc` is the thread-safe equivalent of `Rc`. It uses atomic operations for reference counting.
+
+```rust
+use alloc::sync::Arc;
+use std::thread;
+
+let data = Arc::new(vec![1, 2, 3]);
+let data_clone = Arc::clone(&data);
+
+thread::spawn(move || {
+    println!("{:?}", data_clone);
+});
+```
+
+**Key characteristics:**
+- Thread-safe shared ownership
+- Requires `T: Send + Sync`
+- Slightly more expensive than `Rc` due to atomics
+- Often paired with `Mutex` or `RwLock` for mutation
+
+**Concurrent mutation:**
+```rust
+use alloc::sync::Arc;
+use std::sync::Mutex;
+
+let counter = Arc::new(Mutex::new(0));
+let counter_clone = Arc::clone(&counter);
+
+thread::spawn(move || {
+    *counter_clone.lock().unwrap() += 1;
+});
+```
+</Accordion>
+
+## Collections
+
+<CardGroup cols={2}>
+  <Card title="Vec<T>" icon="list">
+    Growable array allocated on the heap
+  </Card>
+  <Card title="VecDeque<T>" icon="circle-nodes">
+    Double-ended queue
+  </Card>
+  <Card title="LinkedList<T>" icon="link">
+    Doubly-linked list
+  </Card>
+  <Card title="BinaryHeap<T>" icon="layer-group">
+    Priority queue
+  </Card>
+  <Card title="BTreeMap<K, V>" icon="tree">
+    Ordered map based on B-Tree
+  </Card>
+  <Card title="BTreeSet<T>" icon="diagram-tree">
+    Ordered set based on B-Tree
+  </Card>
+</CardGroup>
+
+### Vec - Contiguous Growable Array
+
+<Accordion title="Vec<T> - The most common collection">
+A contiguous growable array type with heap-allocated contents.
+
+```rust
+// Creation
+let mut v = Vec::new();
+let v = vec![1, 2, 3];
+let v = vec![0; 10]; // ten zeroes
+
+// Operations
+v.push(4);
+let last = v.pop();
+let third = v[2];
+v.extend([5, 6, 7]);
+```
+
+**Performance:**
+- O(1) indexing
+- Amortized O(1) push to end
+- O(1) pop from end
+- O(n) insert/remove in middle
+
+**Memory layout:**
+Vec uses the Global allocator. Valid to convert between Vec and raw pointers allocated with the same layout:
+
+```rust
+let mut v = vec![1, 2, 3];
+let ptr = v.as_mut_ptr();
+let len = v.len();
+let cap = v.capacity();
+
+std::mem::forget(v);
+
+// Reconstruct
+let v = unsafe { Vec::from_raw_parts(ptr, len, cap) };
+```
+</Accordion>
+
+### String - Owned UTF-8 Text
+
+<Accordion title="String - Growable UTF-8 text">
+A UTF-8 encoded, growable string.
+
+```rust
+// Creation
+let mut s = String::new();
+let s = String::from("hello");
+let s = "hello".to_string();
+
+// Manipulation
+s.push_str(" world");
+s.push('!');
+let combined = format!("{} {}", s1, s2);
+
+// Conversion
+let bytes: Vec<u8> = s.into_bytes();
+let s = String::from_utf8(bytes).unwrap();
+```
+
+**Key points:**
+- Backed by `Vec<u8>`
+- Always valid UTF-8
+- Not indexable by position (use iterators)
+- Growable and mutable
+</Accordion>
+
+### BTreeMap and BTreeSet
+
+<Accordion title="BTreeMap<K, V> and BTreeSet<T> - Ordered collections">
+Ordered map and set implementations based on B-Trees.
+
+```rust
+use alloc::collections::BTreeMap;
+
+let mut map = BTreeMap::new();
+map.insert("a", 1);
+map.insert("b", 2);
+
+// Iteration is ordered
+for (key, value) in &map {
+    println!("{}: {}", key, value);
+}
+```
+
+**Characteristics:**
+- Keys always sorted
+- O(log n) operations
+- No hash function required
+- Predictable iteration order
+- Range queries supported
+</Accordion>
+
+## Heap Interfaces
+
+<Accordion title="alloc module - Low-level allocation">
+The `alloc` module defines the low-level interface to the default global allocator.
+
+```rust
+use alloc::alloc::{alloc, dealloc, Layout};
+
+let layout = Layout::array::<u32>(10).unwrap();
+let ptr = unsafe { alloc(layout) };
+
+if !ptr.is_null() {
+    // Use the memory
+    unsafe { dealloc(ptr, layout) };
+}
+```
+
+**Key types:**
+- `Layout` - Describes memory layout requirements
+- `Global` - The default allocator
+- `AllocError` - Allocation failure error
+
+<Warning>
+Direct allocator usage is unsafe. Prefer using `Box`, `Vec`, or other safe abstractions.
+</Warning>
+</Accordion>
+
+## Common Patterns
+
+### Shared Ownership with Mutation
+
+```rust
+use alloc::rc::Rc;
+use core::cell::RefCell;
+
+struct Graph {
+    nodes: Vec<Rc<RefCell<Node>>>,
+}
+
+struct Node {
+    value: i32,
+    neighbors: Vec<Rc<RefCell<Node>>>,
+}
+```
+
+### Thread-Safe Shared State
+
+```rust
+use alloc::sync::Arc;
+use std::sync::Mutex;
+
+let data = Arc::new(Mutex::new(Vec::new()));
+
+let handles: Vec<_> = (0..10).map(|i| {
+    let data = Arc::clone(&data);
+    thread::spawn(move || {
+        data.lock().unwrap().push(i);
+    })
+}).collect();
+
+for handle in handles {
+    handle.join().unwrap();
+}
+```
+
+### Builder Pattern with Box
+
+```rust
+pub struct Config {
+    options: Box<[Option<String>]>,
+}
+
+impl Config {
+    pub fn builder() -> ConfigBuilder {
+        ConfigBuilder::default()
+    }
+}
+```
+
+## String Operations
+
+<Accordion title="String manipulation">
+```rust
+let mut s = String::from("hello");
+
+// Appending
+s.push_str(" world");
+s.push('!');
+
+// Capacity management
+s.reserve(100);
+s.shrink_to_fit();
+
+// Conversion
+let bytes = s.as_bytes();
+let str_slice: &str = &s;
+
+// Formatting
+let formatted = format!("Value: {}", 42);
+```
+</Accordion>
+
+## Format Macro
+
+<Accordion title="format! and friends">
+The `format!` macro and related formatting infrastructure:
+
+```rust
+let s = format!("x = {}, y = {}", 10, 20);
+let s = format!("hex: {:#x}", 255);
+let s = format!("debug: {:?}", some_struct);
+```
+
+Related macros (from std):
+- `println!` - Print to stdout with newline
+- `print!` - Print to stdout
+- `eprintln!` - Print to stderr with newline
+- `write!` - Write to a buffer
+</Accordion>
+
+## Borrow and ToOwned
+
+<Accordion title="Borrowing traits">
+The `borrow` module provides traits for borrowing and owned data:
+
+```rust
+use alloc::borrow::{Cow, ToOwned};
+
+// Clone-on-write smart pointer
+let cow: Cow<str> = Cow::Borrowed("hello");
+let owned = cow.into_owned(); // String
+
+// ToOwned trait
+let slice: &[i32] = &[1, 2, 3];
+let vec: Vec<i32> = slice.to_owned();
+```
+</Accordion>
+
+## Task Support
+
+<Accordion title="task module - Async task types">
+Types for working with async tasks:
+
+```rust
+use alloc::task::Wake;
+use core::task::Waker;
+
+struct MyWaker;
+
+impl Wake for MyWaker {
+    fn wake(self: Arc<Self>) {
+        // Wake the task
+    }
+}
+```
+</Accordion>
+
+## Stability
+
+<Note>
+The alloc library has been stable since Rust 1.36.0. It provides a stable interface for heap allocation in both std and no_std environments.
+</Note>
+
+## Feature Flags
+
+The alloc crate respects several configuration options:
+
+- `no_global_oom_handling` - Remove panic on allocation failure
+- `no_rc` - Disable `Rc` type
+- `no_sync` - Disable `Arc` and other sync types
+
+## Related Libraries
+
+- **core** - Dependency-free primitives
+- **std** - Full standard library (re-exports alloc)
+- **hashbrown** - HashMap implementation (used by std)

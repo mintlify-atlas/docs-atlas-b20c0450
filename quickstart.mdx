@@ -1,80 +1,345 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quick Start Guide"
+description: "Get started with Rust by writing and running your first program, setting up a project with Cargo, and exploring the ecosystem."
 ---
 
-## Get started in three steps
+## Your First Rust Program
 
-Get your documentation site running locally and make your first customization.
+Let's get you up and running with Rust in just a few minutes.
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+<Steps>
+  <Step title="Verify your installation">
+    First, make sure Rust is properly installed:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    rustc --version
+    cargo --version
+    ```
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    You should see version information for both the Rust compiler (`rustc`) and the package manager (`cargo`).
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    <Note>
+      If you don't have Rust installed yet, head over to the [Installation](/installation) page.
+    </Note>
+  </Step>
+  
+  <Step title="Write Hello World">
+    Create a new file called `main.rs`:
+    
+    ```rust
+    fn main() {
+        println!("Hello, world!");
+    }
+    ```
+    
+    This is a simple Rust program that prints "Hello, world!" to the console.
+  </Step>
+  
+  <Step title="Compile and run">
+    Compile your program:
+    
+    ```bash
+    rustc main.rs
+    ```
+    
+    This creates an executable called `main` (or `main.exe` on Windows). Run it:
+    
+    ```bash
+    ./main
+    ```
+    
+    You should see:
+    
+    ```
+    Hello, world!
+    ```
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Creating a Project with Cargo
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+While `rustc` is great for simple programs, most Rust developers use **Cargo** - Rust's build tool and package manager.
 
-### Step 3: Go live
+<Steps>
+  <Step title="Create a new project">
+    ```bash
+    cargo new hello_rust
+    cd hello_rust
+    ```
+    
+    This creates a new directory with the following structure:
+    
+    ```
+    hello_rust/
+    ├── Cargo.toml
+    └── src/
+        └── main.rs
+    ```
+  </Step>
+  
+  <Step title="Explore the project structure">
+    **Cargo.toml** - The manifest file containing metadata and dependencies:
+    
+    ```toml
+    [package]
+    name = "hello_rust"
+    version = "0.1.0"
+    edition = "2021"
+    
+    [dependencies]
+    ```
+    
+    **src/main.rs** - Your source code (already contains a "Hello, world!" program)
+  </Step>
+  
+  <Step title="Build and run with Cargo">
+    Build your project:
+    
+    ```bash
+    cargo build
+    ```
+    
+    Or build and run in one command:
+    
+    ```bash
+    cargo run
+    ```
+    
+    <Tip>
+      Use `cargo build --release` for optimized builds. Debug builds are faster to compile but slower to run.
+    </Tip>
+  </Step>
+</Steps>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+## Essential Cargo Commands
 
-## Next steps
-
-Now that you have your docs running, explore these key features:
+Here are the most important Cargo commands you'll use:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="cargo new" icon="plus">
+    Create a new Cargo project
+    
+    ```bash
+    cargo new my_project
+    ```
+  </Card>
+  
+  <Card title="cargo build" icon="hammer">
+    Compile your project
+    
+    ```bash
+    cargo build
+    cargo build --release
+    ```
+  </Card>
+  
+  <Card title="cargo run" icon="play">
+    Build and run your project
+    
+    ```bash
+    cargo run
+    ```
+  </Card>
+  
+  <Card title="cargo test" icon="flask">
+    Run your project's tests
+    
+    ```bash
+    cargo test
+    ```
+  </Card>
+  
+  <Card title="cargo check" icon="check">
+    Check if your code compiles (faster than build)
+    
+    ```bash
+    cargo check
+    ```
+  </Card>
+  
+  <Card title="cargo doc" icon="book">
+    Build documentation for your project
+    
+    ```bash
+    cargo doc --open
+    ```
+  </Card>
 </CardGroup>
 
+## Adding Dependencies
+
+Cargo makes it easy to use external libraries (called "crates" in Rust).
+
+<Steps>
+  <Step title="Add a dependency">
+    Edit `Cargo.toml` and add a dependency:
+    
+    ```toml
+    [dependencies]
+    serde = "1.0"
+    serde_json = "1.0"
+    ```
+  </Step>
+  
+  <Step title="Use the dependency">
+    Import and use it in your code:
+    
+    ```rust
+    use serde_json::json;
+    
+    fn main() {
+        let data = json!({
+            "name": "Rust",
+            "type": "programming language"
+        });
+        println!("{}", data);
+    }
+    ```
+  </Step>
+  
+  <Step title="Build and run">
+    ```bash
+    cargo run
+    ```
+    
+    Cargo automatically downloads and compiles dependencies on the first build.
+  </Step>
+</Steps>
+
+<Tip>
+  Search for crates on [crates.io](https://crates.io), the official Rust package registry.
+</Tip>
+
+## Essential Tools
+
+Rust comes with powerful tools to improve your development experience:
+
+### rustfmt - Code Formatter
+
+Automatically format your code to follow Rust style guidelines:
+
+```bash
+rustfmt src/main.rs
+```
+
+Or format your entire project:
+
+```bash
+cargo fmt
+```
+
+### Clippy - Linter
+
+Catch common mistakes and improve your code:
+
+```bash
+cargo clippy
+```
+
+Clippy provides hundreds of lints to help you write idiomatic and efficient Rust code.
+
+### rust-analyzer - IDE Support
+
+For the best development experience, install the rust-analyzer extension for your editor:
+
+- **VS Code**: Search for "rust-analyzer" in extensions
+- **IntelliJ/CLion**: Rust plugin with rust-analyzer support
+- **Vim/Neovim**: Use CoC or native LSP support
+- **Emacs**: Use lsp-mode or eglot
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  rust-analyzer provides real-time error checking, code completion, inline documentation, and more.
+</Note>
+
+## Understanding Rust's Type System
+
+Here's a quick example showing Rust's powerful type system and ownership model:
+
+```rust
+fn main() {
+    // Variables are immutable by default
+    let x = 5;
+    // x = 6; // This would cause a compile error!
+    
+    // Use 'mut' for mutable variables
+    let mut y = 5;
+    y = 6; // This is fine
+    
+    // Type inference works, but you can be explicit
+    let z: i32 = 42;
+    
+    // String ownership example
+    let s1 = String::from("hello");
+    let s2 = s1; // s1 is moved to s2
+    // println!("{}", s1); // This would error - s1 is no longer valid
+    println!("{}", s2); // This works
+}
+```
+
+<Warning>
+  Rust's ownership system is one of its most unique features. It ensures memory safety without garbage collection, but it requires learning new concepts. Don't worry if it seems confusing at first - it becomes natural with practice!
+</Warning>
+
+## Next Steps
+
+Now that you have Rust set up and running, here are some great resources to continue learning:
+
+<CardGroup cols={2}>
+  <Card
+    title="The Rust Book"
+    icon="book"
+    href="https://doc.rust-lang.org/book/"
+  >
+    The official comprehensive guide to Rust
+  </Card>
+  
+  <Card
+    title="Rust by Example"
+    icon="code"
+    href="https://doc.rust-lang.org/rust-by-example/"
+  >
+    Learn Rust through annotated example programs
+  </Card>
+  
+  <Card
+    title="Rustlings"
+    icon="graduation-cap"
+    href="https://github.com/rust-lang/rustlings"
+  >
+    Small exercises to get you used to reading and writing Rust
+  </Card>
+  
+  <Card
+    title="Standard Library Docs"
+    icon="book-open"
+    href="https://doc.rust-lang.org/std/"
+  >
+    Complete documentation for the Rust standard library
+  </Card>
+</CardGroup>
+
+## Getting Help
+
+If you run into issues or have questions:
+
+- Check the [official documentation](https://doc.rust-lang.org/)
+- Ask on the [Rust Users Forum](https://users.rust-lang.org/)
+- Join the [Rust Discord](https://discord.gg/rust-lang) or [Zulip](https://rust-lang.zulipchat.com)
+- Search [Stack Overflow](https://stackoverflow.com/questions/tagged/rust) with the `rust` tag
+
+<Tip>
+  The Rust community is known for being friendly and welcoming to newcomers. Don't hesitate to ask questions!
+</Tip>
+
+## Contributing to Rust
+
+Interested in contributing to the Rust compiler itself?
+
+- Read the [Contributing Guide](https://github.com/rust-lang/rust/blob/master/CONTRIBUTING.md)
+- Explore the [rustc dev guide](https://rustc-dev-guide.rust-lang.org/) for compiler architecture
+- Join the [#new members](https://rust-lang.zulipchat.com/#narrow/stream/122652-new-members) Zulip stream
+- Check the [Standard Library Developers Guide](https://std-dev-guide.rust-lang.org/)
+
+<Note>
+  There are many ways to contribute to Rust beyond just writing code - documentation, testing, triaging issues, and helping others are all valuable contributions!
 </Note>

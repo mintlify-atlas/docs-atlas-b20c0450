@@ -1,0 +1,887 @@
+---
+title: Configuration Options Reference
+description: Complete reference for all bootstrap.toml configuration options in the Rust compiler build system
+---
+
+## Overview
+
+The Rust compiler build system is configured through `bootstrap.toml` (or `config.toml` for backward compatibility). This file controls all aspects of the build process, from compiler optimization levels to LLVM configuration.
+
+## Configuration Files
+
+<CardGroup cols={2}>
+  <Card title="bootstrap.toml" icon="file">
+    Primary configuration file (recommended)
+  </Card>
+  
+  <Card title="config.toml" icon="file-lines">
+    Legacy configuration file (still supported)
+  </Card>
+  
+  <Card title="bootstrap.example.toml" icon="file-code">
+    Example with all available options
+  </Card>
+  
+  <Card title="Profiles" icon="layer-group">
+    Pre-configured defaults in `src/bootstrap/defaults/`
+  </Card>
+</CardGroup>
+
+## Getting Started
+
+<CodeGroup>
+
+```bash Interactive Setup
+# Recommended: Interactive configuration
+./x.py setup
+
+# Select a profile when prompted
+```
+
+```bash Copy Example
+# Manual setup from example file
+cp bootstrap.example.toml bootstrap.toml
+
+# Edit as needed
+vim bootstrap.toml
+```
+
+```bash Use Profile
+# Specify profile in bootstrap.toml
+profile = "compiler"
+```
+
+</CodeGroup>
+
+## Global Settings
+
+### profile
+
+Use different pre-set defaults than the global defaults.
+
+```toml
+profile = "compiler"  # or "library", "tools", "dist"
+```
+
+<ParamField path="profile" type="string">
+  Available profiles: `compiler`, `library`, `tools`, `dist`
+  
+  See `src/bootstrap/defaults/` for profile definitions.
+</ParamField>
+
+### include
+
+Inherit configuration from other TOML files.
+
+```toml
+include = ["local-config.toml", "team-config.toml"]
+```
+
+<ParamField path="include" type="string[]">
+  Paths to additional configuration files. Later files override earlier ones.
+  
+  Supports absolute paths and relative paths (from current directory).
+</ParamField>
+
+### change-id
+
+Track configuration version for change detection.
+
+```toml
+change-id = 131605
+```
+
+<ParamField path="change-id" type="number">
+  ID from `src/bootstrap/src/utils/change_tracker.rs`
+  
+  Bootstrap warns when this doesn't match the latest change ID. Set to `"ignore"` to suppress warnings.
+</ParamField>
+
+## LLVM Configuration
+
+### llvm.download-ci-llvm
+
+<ParamField path="llvm.download-ci-llvm" type="boolean | string" default="false">
+  Download pre-built LLVM from CI instead of building locally.
+  
+  - `true` - Always download if available
+  - `false` - Never download, always build
+  - `"if-unchanged"` - Download only if llvm-project is unchanged
+</ParamField>
+
+```toml
+[llvm]
+download-ci-llvm = true
+```
+
+<Info>
+  This is the most significant build time optimization. Downloading takes ~5 minutes vs. 30-60 minutes to build.
+</Info>
+
+### llvm.optimize
+
+<ParamField path="llvm.optimize" type="boolean" default="true">
+  Build LLVM in Release mode vs. Debug mode.
+</ParamField>
+
+```toml
+[llvm]
+optimize = true
+```
+
+### llvm.thin-lto
+
+<ParamField path="llvm.thin-lto" type="boolean" default="false">
+  Build LLVM with ThinLTO enabled.
+  
+  Requires clang, lld, llvm-ar, and llvm-ranlib in your toolchain.
+</ParamField>
+
+```toml
+[llvm]
+thin-lto = false
+```
+
+### llvm.assertions
+
+<ParamField path="llvm.assertions" type="boolean" default="false">
+  Enable LLVM assertions.
+  
+  <Warning>
+    When disabled, bugs in rustc/LLVM integration can cause unsoundness (segfaults) in rustc itself.
+  </Warning>
+</ParamField>
+
+```toml
+[llvm]
+assertions = false
+```
+
+### llvm.tests
+
+<ParamField path="llvm.tests" type="boolean" default="false">
+  Enable LLVM test suite in the build.
+  
+  Tests aren't run automatically - use `ninja check-llvm` in LLVM build dir.
+</ParamField>
+
+### llvm.enzyme
+
+<ParamField path="llvm.enzyme" type="boolean" default="false">
+  Build Enzyme as AutoDiff backend.
+</ParamField>
+
+### llvm.ninja
+
+<ParamField path="llvm.ninja" type="boolean" default="true">
+  Use Ninja to build LLVM (much faster than make).
+</ParamField>
+
+### llvm.targets
+
+<ParamField path="llvm.targets" type="string" default="AArch64;AMDGPU;ARM;...">
+  Semicolon-separated list of LLVM targets to build support for.
+  
+  Turning targets off will make rustc unable to compile for those architectures.
+</ParamField>
+
+```toml
+[llvm]
+targets = "AArch64;AMDGPU;ARM;BPF;Hexagon;LoongArch;MSP430;Mips;NVPTX;PowerPC;RISCV;Sparc;SystemZ;WebAssembly;X86"
+```
+
+### llvm.experimental-targets
+
+<ParamField path="llvm.experimental-targets" type="string" default="AVR;M68k;CSKY">
+  Experimental LLVM targets (not built by default).
+</ParamField>
+
+### llvm.link-jobs
+
+<ParamField path="llvm.link-jobs" type="number" default="0">
+  Cap parallel linker invocations when compiling LLVM.
+  
+  Useful when building with debug info. 0 = unlimited.
+</ParamField>
+
+## Build Configuration
+
+### build.build
+
+<ParamField path="build.build" type="string">
+  Build triple for the pre-compiled snapshot compiler.
+  
+  Defaults to output of `rustc --version --verbose` or platform detection.
+</ParamField>
+
+```toml
+[build]
+build = "x86_64-unknown-linux-gnu"
+```
+
+### build.host
+
+<ParamField path="build.host" type="string[]" default="[build.build]">
+  Host triples to build a compiler toolchain for.
+  
+  These are machines that will RUN the compiler.
+</ParamField>
+
+```toml
+[build]
+host = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+```
+
+### build.target
+
+<ParamField path="build.target" type="string[]" default="build.host">
+  Target triples to build libraries for.
+  
+  These are machines the compiler will CROSS-COMPILE to.
+</ParamField>
+
+```toml
+[build]
+target = [
+  "x86_64-unknown-linux-gnu",
+  "wasm32-wasip1",
+  "aarch64-apple-darwin"
+]
+```
+
+### build.build-dir
+
+<ParamField path="build.build-dir" type="string" default="build">
+  Directory to store build artifacts.
+  
+  Paths are relative to the repository root.
+</ParamField>
+
+```toml
+[build]
+build-dir = "build"
+```
+
+### build.cargo / build.rustc
+
+<ParamField path="build.cargo" type="path">
+  Path to cargo binary to use instead of downloading stage0.
+</ParamField>
+
+<ParamField path="build.rustc" type="path">
+  Path to rustc binary to use instead of downloading stage0.
+</ParamField>
+
+```toml
+[build]
+cargo = "/usr/local/bin/cargo"
+rustc = "/usr/local/bin/rustc"
+```
+
+<Info>
+  If you set `rustc`, you should also set `cargo` to use a matching toolchain.
+</Info>
+
+### build.docs
+
+<ParamField path="build.docs" type="boolean" default="true">
+  Whether to build documentation by default.
+  
+  You can still build docs with `./x.py doc library/std` when this is false.
+</ParamField>
+
+### build.docs-minification
+
+<ParamField path="build.docs-minification" type="boolean" default="true">
+  Minify CSS, JavaScript, and HTML in generated docs.
+</ParamField>
+
+### build.compiler-docs
+
+<ParamField path="build.compiler-docs" type="boolean" default="false">
+  Build compiler documentation by default.
+</ParamField>
+
+### build.library-docs-private-items
+
+<ParamField path="build.library-docs-private-items" type="boolean" default="false">
+  Include private items in library documentation.
+</ParamField>
+
+### build.submodules
+
+<ParamField path="build.submodules" type="boolean" default="true">
+  Automatically manage and update git submodules.
+</ParamField>
+
+### build.verbose
+
+<ParamField path="build.verbose" type="number" default="0">
+  Verbosity level:
+  - `0` - Not verbose
+  - `1` - Verbose
+  - `2` - Very verbose  
+  - `3` - Print environment variables on each rustc invocation
+</ParamField>
+
+```toml
+[build]
+verbose = 1
+```
+
+### build.extended
+
+<ParamField path="build.extended" type="boolean" default="false">
+  Build extended Rust tool set (Cargo, rustfmt, clippy, etc.).
+</ParamField>
+
+```toml
+[build]
+extended = true
+```
+
+### build.tools
+
+<ParamField path="build.tools" type="string[]">
+  Tools to include in installation when `extended = true`.
+</ParamField>
+
+```toml
+[build]
+tools = [
+  "cargo",
+  "clippy",
+  "rustdoc",
+  "rustfmt",
+  "rust-analyzer",
+  "rust-analyzer-proc-macro-srv",
+  "analysis",
+  "src"
+]
+```
+
+### build.sanitizers
+
+<ParamField path="build.sanitizers" type="boolean" default="false">
+  Build sanitizer runtimes (AddressSanitizer, ThreadSanitizer, etc.).
+</ParamField>
+
+### build.profiler
+
+<ParamField path="build.profiler" type="boolean" default="false">
+  Build profiler runtime (required for `-C profile-generate` and `-C instrument-coverage`).
+</ParamField>
+
+### build.full-bootstrap
+
+<ParamField path="build.full-bootstrap" type="boolean" default="false">
+  Perform full bootstrap without uplifting artifacts.
+  
+  Useful for verifying reproducible builds.
+</ParamField>
+
+### build.locked-deps
+
+<ParamField path="build.locked-deps" type="boolean" default="false">
+  Force Cargo to check that Cargo.lock is up-to-date.
+</ParamField>
+
+### build.vendor
+
+<ParamField path="build.vendor" type="boolean">
+  Use vendored sources for Rust dependencies.
+  
+  Auto-detected for tarball sources.
+</ParamField>
+
+### build.jobs
+
+<ParamField path="build.jobs" type="number" default="0">
+  Number of parallel jobs. 0 = number of CPU cores.
+</ParamField>
+
+```toml
+[build]
+jobs = 8
+```
+
+### Stage Defaults
+
+<ParamField path="build.build-stage" type="number" default="1">
+  Default stage for `build` subcommand.
+</ParamField>
+
+<ParamField path="build.test-stage" type="number" default="1">
+  Default stage for `test` subcommand.
+</ParamField>
+
+<ParamField path="build.doc-stage" type="number" default="0">
+  Default stage for `doc` subcommand.
+</ParamField>
+
+<ParamField path="build.dist-stage" type="number" default="2">
+  Default stage for `dist` subcommand.
+</ParamField>
+
+<ParamField path="build.install-stage" type="number" default="2">
+  Default stage for `install` subcommand.
+</ParamField>
+
+<ParamField path="build.bench-stage" type="number" default="2">
+  Default stage for `bench` subcommand.
+</ParamField>
+
+```toml
+[build]
+build-stage = 2
+test-stage = 1
+doc-stage = 0
+```
+
+## Rust Compilation Options
+
+### rust.optimize
+
+<ParamField path="rust.optimize" type="boolean | number | string" default="true">
+  Optimization level for compiler and standard library:
+  - `true` or `3` - All optimizations
+  - `false` or `0` - No optimizations (NOT SUPPORTED)
+  - `1` - Basic optimizations
+  - `2` - Some optimizations
+  - `"s"` - Optimize for binary size
+  - `"z"` - Optimize for size, disable loop vectorization
+</ParamField>
+
+```toml
+[rust]
+optimize = true
+```
+
+<Warning>
+  Building with `optimize = false` is NOT SUPPORTED and will cause build failures or extreme slowness.
+</Warning>
+
+### rust.debug
+
+<ParamField path="rust.debug" type="boolean" default="false">
+  Configure build for debugging Rust.
+  
+  Enables debug assertions and other debug-only features.
+</ParamField>
+
+```toml
+[rust]
+debug = false
+```
+
+### rust.debug-assertions
+
+<ParamField path="rust.debug-assertions" type="boolean">
+  Enable debug assertions in compiler and standard library.
+  
+  Defaults to `rust.debug` value.
+</ParamField>
+
+### rust.debug-assertions-std
+
+<ParamField path="rust.debug-assertions-std" type="boolean">
+  Enable debug assertions specifically in standard library.
+  
+  Overrides `debug-assertions`.
+</ParamField>
+
+### rust.overflow-checks
+
+<ParamField path="rust.overflow-checks" type="boolean">
+  Enable overflow checks in compiler and standard library.
+  
+  Defaults to `rust.debug` value.
+</ParamField>
+
+### rust.debuginfo-level
+
+<ParamField path="rust.debuginfo-level" type="number" default="0 or 1">
+  Debuginfo level (corresponds to `-C debuginfo=N`):
+  - `0` - No debug info
+  - `1` - Line tables only
+  - `2` - Full debug info (generates gigabytes, slows linking)
+  
+  Defaults to `1` if `rust.debug = true`, otherwise `0`.
+</ParamField>
+
+```toml
+[rust]
+debuginfo-level = 1
+```
+
+### rust.debuginfo-level-rustc / std / tools / tests
+
+<ParamField path="rust.debuginfo-level-rustc" type="number">
+  Debuginfo level for the compiler.
+</ParamField>
+
+<ParamField path="rust.debuginfo-level-std" type="number">
+  Debuginfo level for the standard library.
+</ParamField>
+
+<ParamField path="rust.debuginfo-level-tools" type="number">
+  Debuginfo level for tools.
+</ParamField>
+
+<ParamField path="rust.debuginfo-level-tests" type="number" default="0">
+  Debuginfo level for compiletest tests.
+</ParamField>
+
+### rust.incremental
+
+<ParamField path="rust.incremental" type="boolean" default="false">
+  Use incremental compilation when building rustc.
+</ParamField>
+
+```toml
+[rust]
+incremental = true
+```
+
+### rust.channel
+
+<ParamField path="rust.channel" type="string" default="dev">
+  Release channel: `stable`, `beta`, `nightly`, `dev`, or `auto-detect`.
+  
+  Stable/beta only allow stable features. Nightly/dev allow unstable features.
+</ParamField>
+
+```toml
+[rust]
+channel = "nightly"
+```
+
+### rust.download-rustc
+
+<ParamField path="rust.download-rustc" type="boolean | string" default="false">
+  Download stage 1 and 2 compilers from CI:
+  - `true` - Always download
+  - `false` - Never download
+  - `"if-unchanged"` - Download if compiler hasn't changed
+  
+  Useful for tool/library development.
+</ParamField>
+
+```toml
+[rust]
+download-rustc = "if-unchanged"
+```
+
+### rust.codegen-backends
+
+<ParamField path="rust.codegen-backends" type="string[]" default='["llvm"]'>
+  Codegen backends to build and include in sysroot.
+  
+  Available: `llvm`, `cranelift`, `gcc`
+</ParamField>
+
+```toml
+[rust]
+codegen-backends = ["llvm", "cranelift"]
+```
+
+### rust.lld
+
+<ParamField path="rust.lld" type="boolean" default="false">
+  Compile and make LLD available in sysroot.
+</ParamField>
+
+### rust.llvm-tools
+
+<ParamField path="rust.llvm-tools" type="boolean" default="true">
+  Make LLVM tools available in sysroot (llvm-objdump, llvm-nm, etc.).
+</ParamField>
+
+### rust.deny-warnings
+
+<ParamField path="rust.deny-warnings" type="boolean" default="true">
+  Deny warnings when compiling rustc and libraries.
+</ParamField>
+
+### rust.backtrace-on-ice
+
+<ParamField path="rust.backtrace-on-ice" type="boolean" default="false">
+  Print backtrace on internal compiler errors during bootstrap.
+</ParamField>
+
+### rust.rpath
+
+<ParamField path="rust.rpath" type="boolean" default="true">
+  Build rustc with rpath enabled.
+  
+  Makes rustc usable directly from build directory.
+</ParamField>
+
+### rust.jemalloc
+
+<ParamField path="rust.jemalloc" type="boolean" default="false">
+  Link compiler against jemalloc instead of system allocator.
+  
+  Only tested on Linux and macOS.
+</ParamField>
+
+### rust.lto
+
+<ParamField path="rust.lto" type="string" default="thin-local">
+  LTO mode for rustc compilation:
+  - `"thin-local"` - Thin LTO within single crate
+  - `"thin"` - Thin LTO across crates
+  - `"fat"` - Fat LTO
+  - `"off"` - No LTO
+</ParamField>
+
+```toml
+[rust]
+lto = "thin"
+```
+
+## Installation Options
+
+### install.prefix
+
+<ParamField path="install.prefix" type="path" default="/usr/local">
+  Installation prefix (must be absolute path).
+</ParamField>
+
+```toml
+[install]
+prefix = "/usr/local"
+```
+
+### install.sysconfdir
+
+<ParamField path="install.sysconfdir" type="path" default="/etc">
+  System configuration directory.
+</ParamField>
+
+### install.docdir
+
+<ParamField path="install.docdir" type="path" default="share/doc/rust">
+  Documentation installation directory (relative to prefix).
+</ParamField>
+
+### install.bindir
+
+<ParamField path="install.bindir" type="path" default="bin">
+  Binary installation directory (relative to prefix).
+</ParamField>
+
+### install.libdir
+
+<ParamField path="install.libdir" type="path" default="lib">
+  Library installation directory (relative to prefix).
+</ParamField>
+
+### install.mandir
+
+<ParamField path="install.mandir" type="path" default="share/man">
+  Man page installation directory (relative to prefix).
+</ParamField>
+
+## Target-Specific Options
+
+Configure options for specific target triples:
+
+```toml
+[target.x86_64-unknown-linux-gnu]
+cc = "clang"
+cxx = "clang++"
+linker = "clang"
+ar = "llvm-ar"
+ranlib = "llvm-ranlib"
+
+[target.wasm32-wasip1]
+wasi-root = "/path/to/wasi-sdk"
+```
+
+### Compiler Toolchain
+
+<ParamField path="target.<triple>.cc" type="path" default="cc">
+  C compiler for this target.
+</ParamField>
+
+<ParamField path="target.<triple>.cxx" type="path" default="c++">
+  C++ compiler for this target (host targets only).
+</ParamField>
+
+<ParamField path="target.<triple>.ar" type="path" default="ar">
+  Archiver for this target.
+</ParamField>
+
+<ParamField path="target.<triple>.ranlib" type="path" default="ranlib">
+  Ranlib for this target.
+</ParamField>
+
+<ParamField path="target.<triple>.linker" type="path" default="cc">
+  Linker for bootstrapping Rust code.
+</ParamField>
+
+### Target Configuration
+
+<ParamField path="target.<triple>.llvm-config" type="path">
+  Path to llvm-config for custom LLVM installation.
+  
+  When specified, LLVM won't be built for this target.
+</ParamField>
+
+<ParamField path="target.<triple>.llvm-filecheck" type="path">
+  Path to LLVM FileCheck utility.
+</ParamField>
+
+<ParamField path="target.<triple>.llvm-libunwind" type="string" default="no">
+  LLVM libunwind configuration:
+  - `"no"` - Link to libgcc_s.so
+  - `"in-tree"` - Static link to in-tree llvm-libunwind
+  - `"system"` - Link to system libunwind
+</ParamField>
+
+<ParamField path="target.<triple>.musl-root" type="path">
+  Root of musl installation for musl targets.
+</ParamField>
+
+<ParamField path="target.<triple>.wasi-root" type="path">
+  Root of WASI SDK for wasm32-wasip1 targets.
+</ParamField>
+
+<ParamField path="target.<triple>.qemu-rootfs" type="path">
+  QEMU rootfs location for testing.
+</ParamField>
+
+<ParamField path="target.<triple>.no-std" type="boolean">
+  Skip building std library for this target.
+  
+  Auto-enabled for `*-none-*`, `nvptx*`, and `*-uefi` targets.
+</ParamField>
+
+<ParamField path="target.<triple>.sanitizers" type="boolean">
+  Build sanitizer runtimes for this target.
+</ParamField>
+
+<ParamField path="target.<triple>.profiler" type="boolean | path">
+  Build profiler runtime for this target, or use existing one at path.
+</ParamField>
+
+<ParamField path="target.<triple>.rpath" type="boolean">
+  Enable rpath for this target.
+</ParamField>
+
+<ParamField path="target.<triple>.crt-static" type="boolean">
+  Force static/dynamic linkage of standard library.
+</ParamField>
+
+<ParamField path="target.<triple>.runner" type="string">
+  Test runner for compiletest (e.g., QEMU, wasmtime).
+</ParamField>
+
+## Distribution Options
+
+### dist.sign-folder
+
+<ParamField path="dist.sign-folder" type="path">
+  Folder containing artifacts to sign with GPG.
+</ParamField>
+
+### dist.upload-addr
+
+<ParamField path="dist.upload-addr" type="url">
+  Remote address for artifact uploads.
+</ParamField>
+
+### dist.compression-formats
+
+<ParamField path="dist.compression-formats" type="string[]" default='["gz", "xz"]'>
+  Compression formats for dist tarballs.
+</ParamField>
+
+```toml
+[dist]
+compression-formats = ["gz", "xz"]
+```
+
+### dist.compression-profile
+
+<ParamField path="dist.compression-profile" type="string" default="fast">
+  Compression profile: `fast`, `balanced`, or `best`.
+</ParamField>
+
+## Example Configurations
+
+<CodeGroup>
+
+```toml Compiler Development
+profile = "compiler"
+
+[llvm]
+download-ci-llvm = true
+assertions = true
+
+[build]
+verbose = 1
+build-stage = 1
+
+[rust]
+debug = false
+incremental = true
+```
+
+```toml Library Development  
+profile = "library"
+
+[llvm]
+download-ci-llvm = true
+
+[rust]
+download-rustc = "if-unchanged"
+incremental = true
+```
+
+```toml Fast Iteration
+[llvm]
+download-ci-llvm = true
+
+[build]
+verbose = 1
+extended = false
+
+[rust]
+download-rustc = "if-unchanged"
+incremental = true
+debug-assertions = false
+```
+
+```toml Production Build
+profile = "dist"
+
+[llvm]
+download-ci-llvm = false
+optimize = true
+thin-lto = true
+
+[build]
+extended = true
+tools = ["cargo", "clippy", "rustdoc", "rustfmt"]
+
+[rust]
+optimize = true
+lto = "thin"
+channel = "stable"
+```
+
+</CodeGroup>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Bootstrap System" icon="gears" href="/reference/bootstrap">
+    Learn about bootstrap architecture
+  </Card>
+  
+  <Card title="x.py Reference" icon="terminal" href="/reference/x-py">
+    Explore x.py commands
+  </Card>
+</CardGroup>

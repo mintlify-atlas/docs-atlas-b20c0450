@@ -1,0 +1,729 @@
+---
+title: Glossary
+description: Comprehensive glossary of Rust compiler and language terminology
+---
+
+This glossary provides definitions for terms commonly used in the Rust compiler, language specifications, and development ecosystem.
+
+## A
+
+<Accordion title="APIT (Argument-Position impl Trait)">
+An argument-position `impl Trait`, also known as an anonymous type parameter.
+
+```rust
+fn process(item: impl Display) {
+    println!("Processing: {}", item);
+}
+```
+
+Equivalent to a generic parameter but more concise for simple cases.
+</Accordion>
+
+<Accordion title="Arena / Arena Allocation">
+A large memory buffer from which other memory allocations are made. This allocation strategy improves performance by:
+- Reducing allocation overhead
+- Enabling bulk deallocation
+- Improving cache locality
+
+The compiler uses arenas extensively to manage AST and HIR data structures.
+</Accordion>
+
+<Accordion title="AST (Abstract Syntax Tree)">
+The abstract syntax tree produced by the `rustc_ast` crate that closely reflects user syntax. It's the first major representation of code after parsing.
+
+**Example:** The code `let x = 5;` is parsed into an AST node representing a let-binding with pattern `x` and expression `5`.
+</Accordion>
+
+## B
+
+<Accordion title="Binder">
+A place where a variable or type is declared. Examples:
+- `<T>` in `fn foo<T>(..)` is a binder for generic type parameter `T`
+- `|a|` in a closure is a binder for parameter `a`
+
+<Info>
+See also: [Bound Variable](#bound-variable), [Free Variable](#free-variable)
+</Info>
+</Accordion>
+
+<Accordion title="BodyId">
+An identifier that refers to a specific body (definition of a function or constant) in the crate. Used internally by the compiler to reference function implementations.
+</Accordion>
+
+<Accordion title="Bound Variable">
+A variable declared within an expression or term. In the closure `|a| a * 2`, the variable `a` is bound.
+
+**Contrast with:** Free variables, which are used but not declared within the expression.
+</Accordion>
+
+## C
+
+<Accordion title="Codegen (Code Generation)">
+The process of translating MIR (Mid-level Intermediate Representation) into LLVM IR for final compilation to machine code.
+
+**Pipeline:** HIR → MIR → LLVM IR → Machine Code
+</Accordion>
+
+<Accordion title="Codegen Unit (CGU)">
+When producing LLVM IR, Rust code is grouped into codegen units. Each unit:
+- Is processed by LLVM independently (enables parallelism)
+- Serves as the unit of incremental reuse
+- Can be controlled with compiler flags for optimization
+</Accordion>
+
+<Accordion title="Control-Flow Graph (CFG)">
+A representation of the control flow in a program, showing all paths that might be traversed during execution. Used for:
+- Dataflow analysis
+- Optimization passes
+- Borrow checking
+</Accordion>
+
+<Accordion title="CTFE (Compile-Time Function Evaluation)">
+The compiler's ability to evaluate `const fn` functions at compile time.
+
+```rust
+const fn square(x: i32) -> i32 {
+    x * x
+}
+
+const RESULT: i32 = square(5); // Evaluated at compile time
+```
+
+Part of Rust's constant evaluation system.
+</Accordion>
+
+<Accordion title="cx / tcx / infcx">
+Common abbreviations for "context" in the compiler:
+- `cx`: Generic context
+- `tcx`: Typing context (`TyCtxt`), the main compiler data structure
+- `infcx`: Type inference context (`InferCtxt`)
+</Accordion>
+
+## D
+
+<Accordion title="DAG (Directed Acyclic Graph)">
+Used during compilation to track dependencies between queries in the query system. Ensures no circular dependencies exist.
+</Accordion>
+
+<Accordion title="Data-Flow Analysis">
+A static analysis technique that determines what properties hold true at each point in a program's control flow. Used for:
+- Borrow checking
+- Initialization analysis
+- Dead code detection
+</Accordion>
+
+<Accordion title="De Bruijn Index">
+A technique for representing bound variables using only integers, making variable references independent of naming.
+
+**Benefit:** Invariant under variable renaming, simplifying compiler operations.
+</Accordion>
+
+<Accordion title="DefId (Definition ID)">
+An index uniquely identifying a definition in the crate (function, type, constant, etc.). Fundamental to the compiler's type system and name resolution.
+</Accordion>
+
+<Accordion title="Discriminant">
+The underlying value associated with an enum variant that indicates which variant is "active" at runtime.
+
+```rust
+enum Status {
+    Success = 0,
+    Error = 1,
+}
+// Discriminant values: 0 and 1
+```
+
+<Warning>
+Not to be confused with variant index, which is internal to the compiler.
+</Warning>
+</Accordion>
+
+<Accordion title="Drop Glue">
+Compiler-generated code that handles calling destructors (`Drop` trait implementations) for data types when they go out of scope.
+</Accordion>
+
+<Accordion title="DST (Dynamically-Sized Type)">
+A type whose size cannot be known at compile time.
+
+**Examples:**
+- `str` (string slice)
+- `[T]` (slice)
+- Trait objects like `dyn Display`
+
+**Restrictions:**
+- Must be behind a pointer (`&str`, `Box<dyn Display>`)
+- Can only be the last field in a struct
+- Cannot be allocated on the stack directly
+- Don't implement `Sized` trait
+</Accordion>
+
+## E
+
+<Accordion title="Early-Bound Lifetime">
+A lifetime region substituted at its definition site. Bound in an item's `Generics` and substituted using `GenericArgs`.
+
+**Contrast with:** Late-bound lifetime (substituted at call site)
+</Accordion>
+
+<Accordion title="Effects">
+Currently refers to const traits and `~const` bounds, allowing trait bounds to be used in const contexts.
+</Accordion>
+
+## F
+
+<Accordion title="Fat Pointer (Wide Pointer)">
+A two-word pointer carrying:
+1. The address of the value
+2. Additional metadata
+
+**Types of fat pointers:**
+- **Slice references** (`&[T]`): address + length
+- **Trait objects** (`&dyn Trait`): address + vtable pointer
+
+```rust
+let slice: &[i32] = &[1, 2, 3];
+// Fat pointer: [data_ptr, length: 3]
+
+let trait_obj: &dyn Display = &"hello";
+// Fat pointer: [data_ptr, vtable_ptr]
+```
+</Accordion>
+
+<Accordion title="Free Variable">
+A variable used in an expression but not declared (bound) within it. Commonly seen in closures.
+
+```rust
+let x = 5;
+let closure = || x + 1; // x is a free variable (captured)
+```
+</Accordion>
+
+## G
+
+<Accordion title="Generics">
+The list of generic parameters defined on an item. Three kinds:
+1. **Type parameters:** `<T>`
+2. **Lifetime parameters:** `<'a>`
+3. **Const parameters:** `<const N: usize>`
+
+```rust
+fn process<'a, T: Display, const N: usize>(items: &'a [T; N]) {
+    // 'a: lifetime, T: type, N: const
+}
+```
+</Accordion>
+
+## H
+
+<Accordion title="HIR (High-Level Intermediate Representation)">
+Created by lowering and desugaring the AST. More suitable for type checking and analysis than the AST.
+
+**Transformation:** Source Code → AST → HIR → MIR → LLVM IR
+</Accordion>
+
+<Accordion title="HirId">
+Identifies a particular node in the HIR by combining a def-id with an "intra-definition offset".
+</Accordion>
+
+## I
+
+<Accordion title="ICE (Internal Compiler Error)">
+When the compiler crashes unexpectedly. These are considered bugs in the compiler.
+
+<Warning>
+If you encounter an ICE, please report it at [github.com/rust-lang/rust/issues](https://github.com/rust-lang/rust/issues)
+</Warning>
+</Accordion>
+
+<Accordion title="ICH (Incremental Compilation Hash)">
+Fingerprints (hashes) for HIR, crate metadata, and other compiler artifacts. Used to detect changes and enable incremental compilation.
+</Accordion>
+
+<Accordion title="Inference Variable">
+A special type/region/const representing an unknown value during type inference. Think of it as "X" in algebra.
+
+**Example:** When inferring `let x = vec![];`, the compiler creates an inference variable for the vector's element type.
+</Accordion>
+
+<Accordion title="Intern / Interning">
+Storing frequently-used constant data (like strings) once and referring to it by identifier rather than copying it repeatedly.
+
+**Benefits:**
+- Reduced memory usage
+- Fewer allocations
+- Fast equality comparisons (compare identifiers, not content)
+</Accordion>
+
+<Accordion title="Interpreter">
+The heart of const evaluation, executing MIR code at compile time to compute constant values.
+</Accordion>
+
+<Accordion title="Intrinsic">
+Special functions implemented in the compiler itself but exposed to users (often as unstable features). They perform "magical" low-level operations.
+
+**Examples:**
+- `std::intrinsics::transmute`
+- SIMD operations
+- Atomic operations
+
+<Warning>
+Intrinsics are often unsafe and unstable. Use with caution.
+</Warning>
+</Accordion>
+
+<Accordion title="IR (Intermediate Representation)">
+A general compiler term for transformed code representations between source and machine code.
+
+**Rust's IRs:**
+1. **AST** - Reflects source syntax
+2. **HIR** - Desugared, suitable for type checking
+3. **MIR** - Control-flow graph, suitable for borrow checking
+4. **LLVM IR** - Low-level, suitable for optimization and codegen
+</Accordion>
+
+## L
+
+<Accordion title="Lang Item">
+Items representing concepts intrinsic to the language itself.
+
+**Examples:**
+- Built-in traits: `Sync`, `Send`, `Copy`
+- Operator traits: `Add`, `Deref`
+- Special types: `Box`, `String`
+- Compiler-called functions
+
+Marked with `#[lang = "..."]` attribute.
+</Accordion>
+
+<Accordion title="Late-Bound Lifetime">
+A lifetime region substituted at its call site. Used in Higher-Rank Trait Bounds (HRTB).
+
+```rust
+fn apply<F>(f: F) 
+where 
+    F: for<'a> Fn(&'a str) -> &'a str
+{
+    // 'a is late-bound
+}
+```
+
+**Contrast with:** Early-bound lifetime
+</Accordion>
+
+<Accordion title="LLVM">
+An open-source compiler backend that accepts LLVM IR and outputs native binaries. Rust compiles to LLVM IR, enabling support for all platforms LLVM supports.
+</Accordion>
+
+<Accordion title="Local Crate">
+The crate currently being compiled. **Contrast with:** Upstream crates (dependencies).
+</Accordion>
+
+<Accordion title="LTO (Link-Time Optimization)">
+Optimizations performed just before final binary linking:
+- **FatLTO**: Full optimization across all code
+- **ThinLTO**: Scalable variant with some trade-offs
+
+**Benefits:** Removes unused code, inlines across crates, better optimization opportunities.
+</Accordion>
+
+## M
+
+<Accordion title="Memoization">
+Storing results of pure computations to avoid repeating them. Trade-off between execution speed and memory usage.
+
+Used extensively in the compiler's query system.
+</Accordion>
+
+<Accordion title="MIR (Mid-Level Intermediate Representation)">
+Created after type-checking, used for borrow checking and codegen. Represents code as a control-flow graph with basic blocks.
+
+**Advantages:**
+- Easier to analyze than HIR
+- Explicit control flow
+- Suitable for optimizations
+</Accordion>
+
+<Accordion title="Miri">
+An interpreter for Rust's MIR that can detect Undefined Behavior in unsafe code.
+
+```bash
+cargo +nightly miri test
+```
+
+Extremely useful for validating unsafe code correctness.
+</Accordion>
+
+<Accordion title="Monomorphization">
+The process of creating concrete implementations from generic code.
+
+```rust
+fn generic<T>(x: T) -> T { x }
+
+let _a = generic(5i32);     // Generates generic::<i32>
+let _b = generic("hello");  // Generates generic::<&str>
+```
+
+Each generic instantiation gets its own machine code copy.
+</Accordion>
+
+## N
+
+<Accordion title="Newtype">
+A wrapper around another type, usually a single-field tuple struct.
+
+```rust
+struct UserId(u64);
+struct Meters(f64);
+```
+
+**Benefits:**
+- Type safety (can't mix up `UserId` and other `u64`s)
+- Zero runtime cost
+- Can implement traits specifically for the newtype
+</Accordion>
+
+<Accordion title="Niche">
+Invalid bit patterns for a type that can be used for layout optimizations.
+
+**Example:** `Option<&T>` uses the same size as `&T` because `&T` cannot be null (null is the niche representing `None`).
+
+```rust
+assert_eq!(
+    std::mem::size_of::<Option<&i32>>(),
+    std::mem::size_of::<&i32>()
+);
+```
+</Accordion>
+
+<Accordion title="NLL (Non-Lexical Lifetimes)">
+An extension to Rust's borrowing system making lifetimes based on control-flow graph rather than lexical scopes.
+
+**Enables code like:**
+```rust
+let mut x = 5;
+let y = &x;      // borrow starts
+println!("{}", y); // borrow ends here (last use)
+x = 6;           // OK! No longer borrowed
+```
+</Accordion>
+
+<Accordion title="NodeId">
+An index identifying a node in the AST or HIR. Being gradually replaced by `HirId`.
+</Accordion>
+
+## O
+
+<Accordion title="Obligation">
+Something that must be proven by the trait system during type checking.
+
+**Example:** When you call a generic function with a trait bound, the compiler creates an obligation to prove that bound is satisfied.
+</Accordion>
+
+## P
+
+<Accordion title="Placeholder">
+A way of handling subtyping around "for-all" types. Replaced the older skolemization approach.
+
+Used for higher-ranked trait bounds and lifetime inference.
+</Accordion>
+
+<Accordion title="Point">
+In NLL analysis, a location in the MIR, typically a node in the control-flow graph.
+</Accordion>
+
+<Accordion title="Projection">
+A "relative path" to a type or value:
+- **Field projection:** `x.field`
+- **Associated type projection:** `T::Item`, `<Vec<T> as IntoIterator>::Item`
+</Accordion>
+
+<Accordion title="Promoted Constants">
+Constants extracted from functions and lifted to static scope for compile-time evaluation.
+
+```rust
+const fn helper() -> i32 { 42 }
+
+fn example() {
+    let x = &helper(); // helper() promoted to static
+}
+```
+</Accordion>
+
+<Accordion title="Provider">
+The function that executes a query in the query system.
+</Accordion>
+
+## Q
+
+<Accordion title="Quantified">
+In type theory, asking questions with existential (∃) or universal (∀) quantifiers:
+- **Existential:** "Is there any type T for which this is true?"
+- **Universal:** "Is this true for all types T?"
+
+**Example:** `for<'a> fn(&'a str)` uses universal quantification over lifetime `'a`.
+</Accordion>
+
+<Accordion title="Query">
+A sub-computation during compilation whose results can be cached (memoized).
+
+**Examples:**
+- `type_of(DefId)` - Get the type of a definition
+- `mir_built(DefId)` - Get the MIR for a function
+
+Enables incremental compilation and parallelization.
+</Accordion>
+
+## R
+
+<Accordion title="Recovery">
+Handling invalid syntax during parsing and continuing to parse. Avoids cascading spurious errors.
+
+**Example:** If a struct definition has a syntax error, the parser recovers and continues, avoiding "missing field" errors that would be misleading.
+</Accordion>
+
+<Accordion title="Region">
+Another term for "lifetime," commonly used in academic literature and the borrow checker implementation.
+</Accordion>
+
+<Accordion title="Rib">
+A data structure in name resolution tracking a single scope for names. Ribs form a stack representing nested scopes.
+</Accordion>
+
+<Accordion title="RPIT (Return-Position impl Trait)">
+Using `impl Trait` in return position.
+
+```rust
+fn returns_iterator() -> impl Iterator<Item = i32> {
+    vec![1, 2, 3].into_iter()
+}
+```
+
+Creates an opaque type known only to the function.
+</Accordion>
+
+<Accordion title="RPITIT (Return-Position impl Trait in Trait)">
+Using `impl Trait` in trait method return types. Desugared to a generic associated type (GAT).
+
+```rust
+trait Container {
+    fn iter(&self) -> impl Iterator<Item = i32>;
+}
+```
+</Accordion>
+
+## S
+
+<Accordion title="Scrutinee">
+The expression matched in pattern matching constructs.
+
+```rust
+match expression {  // 'expression' is the scrutinee
+    Pattern1 => ...,
+    Pattern2 => ...,
+}
+```
+</Accordion>
+
+<Accordion title="Sess (Session)">
+The compiler session storing global data used throughout compilation. Accessed via `tcx.sess`.
+</Accordion>
+
+<Accordion title="Side Tables">
+Hashtables storing extra information about AST/HIR nodes (which are immutable). Indexed by node ID.
+
+**Examples:** Type information, resolution data, lint levels.
+</Accordion>
+
+<Accordion title="Sigil">
+A keyword-like symbol composed of non-alphanumeric characters.
+
+**Examples:**
+- `&` - reference sigil
+- `*` - dereference/raw pointer sigil
+- `!` - macro sigil
+</Accordion>
+
+<Accordion title="Soundness">
+A type system property: if a program type-checks, it is type-safe and cannot cause undefined behavior in safe code.
+
+**Rust's guarantee:** Safe Rust is sound (cannot cause UB without `unsafe`).
+</Accordion>
+
+<Accordion title="Span">
+A location in source code used for error reporting. Contains:
+- File name
+- Start and end positions
+- Macro expansion tracking
+- Compiler desugaring information
+
+All while being compactly stored.
+</Accordion>
+
+<Accordion title="Substs / Subst (Substitution)">
+Replacing generic parameters with concrete types.
+
+**Modern terminology:** "Instantiation" or "generic arguments"
+
+```rust
+HashMap<String, i32>  // i32, String are substitutions/generic args
+```
+</Accordion>
+
+<Accordion title="Sysroot">
+The directory containing build artifacts loaded by the compiler at runtime (standard library, core, etc.).
+
+View with: `rustc --print sysroot`
+</Accordion>
+
+## T
+
+<Accordion title="Tag">
+Encodes the discriminant of an active enum variant or generator state. Can be:
+- **Direct:** Stored in a dedicated field
+- **Niche-based:** Uses invalid bit patterns of other fields
+</Accordion>
+
+<Accordion title="TAIT (Type-Alias impl Trait)">
+Defining opaque types with type aliases.
+
+```rust
+type MyIter = impl Iterator<Item = i32>;
+
+fn get_iter() -> MyIter {
+    vec![1, 2, 3].into_iter()
+}
+```
+</Accordion>
+
+<Accordion title="tcx (Typing Context)">
+Standard variable name for `TyCtxt`, the main compiler data structure providing access to:
+- Session data
+- Query system
+- Type information
+- HIR/MIR
+</Accordion>
+
+<Accordion title="'tcx Lifetime">
+The lifetime of the compiler's main allocation arena. Most interned data uses this lifetime.
+</Accordion>
+
+<Accordion title="TLS (Thread-Local Storage)">
+Variables where each thread has its own copy. Used in the compiler for thread-specific state.
+
+<Warning>
+Not all platforms support TLS. Can affect target support.
+</Warning>
+</Accordion>
+
+<Accordion title="Token">
+The smallest unit of parsing, produced after lexing.
+
+**Examples:** Keywords (`fn`, `let`), literals (`42`, `"hello"`), operators (`+`, `->`), delimiters (`{`, `}`).
+</Accordion>
+
+<Accordion title="Trait Reference (trait ref)">
+A trait name with concrete generic arguments.
+
+```rust
+Display              // Trait reference with no args
+Iterator<Item = i32> // Trait reference with associated type
+Fn(i32) -> bool      // Trait reference (Fn is a trait)
+```
+</Accordion>
+
+<Accordion title="Trans (Translation)">
+**Deprecated term.** Now called [codegen](#codegen). Referred to translating MIR to LLVM IR.
+</Accordion>
+
+<Accordion title="Ty">
+The internal representation of a type in the compiler. Found in `rustc_middle::ty`.
+</Accordion>
+
+<Accordion title="TyCtxt (Type Context)">
+The central data structure (`tcx`) providing access to all compiler state and the query system.
+</Accordion>
+
+## U
+
+<Accordion title="UFCS (Universal Function Call Syntax)">
+**Deprecated term.** Now called "fully-qualified syntax."
+
+```rust
+Trait::method(&value)           // Qualified
+<Type as Trait>::method(&value) // Fully-qualified
+```
+</Accordion>
+
+<Accordion title="Uninhabited Type (Empty Type)">
+A type with no values whatsoever.
+
+**Examples:**
+```rust
+enum Never {}  // No variants = no values
+let x: !;      // Never type
+```
+
+**Not the same as ZST:** ZST has exactly one value; uninhabited types have zero.
+
+Code dealing with uninhabited types can be treated as dead code.
+</Accordion>
+
+<Accordion title="Upvar">
+A variable captured by a closure from outside the closure.
+
+```rust
+let x = 5;
+let closure = || x + 1;  // x is an upvar
+```
+</Accordion>
+
+## V
+
+<Accordion title="Variance">
+How changes to generic parameters affect subtyping.
+
+**Types:**
+- **Covariant:** `Vec<T>` is covariant in `T` (if `T: U`, then `Vec<T>: Vec<U>`)
+- **Contravariant:** `Fn(T)` is contravariant in `T`
+- **Invariant:** `&mut T` is invariant in `T`
+</Accordion>
+
+<Accordion title="Variant Index">
+Internal compiler identifier for enum variants (0, 1, 2, ...). Not to be confused with user-visible discriminants.
+</Accordion>
+
+## W
+
+<Accordion title="Well-Formedness">
+A type or construct that follows the rules of the type system.
+
+**Examples of well-formed types:**
+- `Vec<i32>` ✓
+- `&'a T where T: 'a` ✓
+
+**Not well-formed:**
+- `Vec` (missing generic argument) ✗
+</Accordion>
+
+<Accordion title="Wide Pointer">
+See [Fat Pointer](#fat-pointer-wide-pointer).
+</Accordion>
+
+## Z
+
+<Accordion title="ZST (Zero-Sized Type)">
+A type whose values have size 0 bytes. Since 2^0 = 1, such types have exactly one value.
+
+**Examples:**
+```rust
+struct Unit;     // ZST
+struct Empty {}  // ZST
+let x = ();      // () is a ZST
+```
+
+**Compiler optimizations:** ZSTs can be optimized away entirely, no memory allocation needed.
+
+<Info>
+A `Vec<()>` only stores its length, not the actual `()` values!
+</Info>
+</Accordion>

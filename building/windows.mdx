@@ -1,0 +1,431 @@
+---
+title: Building on Windows
+description: Complete guide to building Rust from source on Windows with MSVC or MinGW toolchains
+---
+
+## ABI Selection
+
+Windows has two prominent ABIs (Application Binary Interfaces):
+
+<CardGroup cols={2}>
+  <Card title="MSVC ABI" icon="windows">
+    **Native Windows ABI**
+    - Used by Visual Studio
+    - Best for Windows-specific development
+    - Interoperates with MSVC-built libraries
+    - Recommended for most users
+  </Card>
+  <Card title="GNU ABI" icon="code">
+    **MinGW/GCC Toolchain**
+    - Uses GNU toolchain (GCC)
+    - Better for cross-platform code
+    - Interoperates with MinGW-built libraries
+    - Good for Unix-style development on Windows
+  </Card>
+</CardGroup>
+
+<Note>
+Choose the ABI based on which C/C++ libraries you need to interoperate with. You can build both if needed.
+</Note>
+
+## Available Build Triples
+
+<Tabs>
+  <Tab title="GNU ABI (GCC)">
+    - `i686-pc-windows-gnu` (32-bit)
+    - `x86_64-pc-windows-gnu` (64-bit)
+  </Tab>
+  <Tab title="MSVC ABI">
+    - `i686-pc-windows-msvc` (32-bit)
+    - `x86_64-pc-windows-msvc` (64-bit)
+  </Tab>
+</Tabs>
+
+Specify the build triple using:
+
+```bash
+python x.py build --build=x86_64-pc-windows-msvc
+```
+
+Or in `bootstrap.toml`:
+
+```toml
+[build]
+build = "x86_64-pc-windows-msvc"
+```
+
+## Building with MSVC
+
+<Steps>
+  <Step title="Install Dependencies">
+    Install required tools using winget (Windows Package Manager):
+
+    ```powershell
+    winget install -e Python.Python.3
+    winget install -e Kitware.CMake
+    winget install -e Git.Git
+    ```
+
+    <Tip>
+    After installation, add CMake to your system PATH:
+    `C:\Program Files\CMake\bin`
+
+    See [this guide](https://www.java.com/en/download/help/path.html) for instructions on editing PATH.
+    </Tip>
+  </Step>
+
+  <Step title="Install Visual Studio">
+    Install Visual Studio 2022 or later with C++ build tools:
+
+    1. Download [Visual Studio](https://visualstudio.microsoft.com/downloads/)
+    2. Run the installer
+    3. Select **"Desktop development with C++"** workload
+    4. Include **Windows 10 or 11 SDK**
+
+    <Warning>
+    **Do NOT** select "C++ CMake tools for Windows" under Individual Components - use the standalone CMake installed via winget instead.
+    </Warning>
+
+    <Note>
+    Visual Studio 2019 may work but is not actively tested. Visual Studio 2022 or later is recommended.
+    </Note>
+  </Step>
+
+  <Step title="Clone the Repository">
+    ```powershell
+    git clone https://github.com/rust-lang/rust.git
+    cd rust
+    ```
+  </Step>
+
+  <Step title="Configure the Build">
+    Run the interactive setup:
+
+    ```powershell
+    python x.py setup user
+    ```
+
+    Or create `bootstrap.toml` manually:
+
+    ```toml bootstrap.toml
+    [build]
+    build = "x86_64-pc-windows-msvc"
+    extended = true
+    tools = ["cargo", "clippy", "rustfmt"]
+
+    [llvm]
+    # Highly recommended - skip building LLVM
+    download-ci-llvm = true
+    ```
+  </Step>
+
+  <Step title="Build Rust">
+    Open a **Command Prompt** or **PowerShell** and run:
+
+    ```powershell
+    python x.py build
+    ```
+
+    <Note>
+    The first build can take 30 minutes to several hours depending on your hardware.
+    </Note>
+  </Step>
+</Steps>
+
+### Troubleshooting MSVC Builds
+
+<AccordionGroup>
+  <Accordion title="Visual Studio Version Not Detected">
+    If bootstrap doesn't detect your Visual Studio version, manually call the vcvars script:
+
+    ```batch
+    CALL "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+    python x.py build
+    ```
+
+    For Visual Studio 2019:
+    ```batch
+    CALL "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat"
+    python x.py build
+    ```
+  </Accordion>
+
+  <Accordion title="Slow Performance During Build">
+    Several tips to improve build speed:
+
+    1. **Disable Windows Defender Real-Time Protection** (temporarily)
+       - Note: It will re-enable automatically after some time
+
+    2. **Use native Windows Python** instead of MSYS2 Python
+       - Can help with LLVM build issues
+
+    3. **Use Git for Windows** instead of MSYS2 Git
+       - Often much faster for git operations
+
+    4. **Download pre-built LLVM**:
+       ```toml
+       [llvm]
+       download-ci-llvm = true
+       ```
+  </Accordion>
+
+  <Accordion title="Linker Errors">
+    If you encounter linker errors, ensure:
+
+    1. Visual Studio is properly installed with C++ tools
+    2. Windows SDK is installed
+    3. You're running from a Visual Studio command prompt, or vcvars is called
+  </Accordion>
+</AccordionGroup>
+
+## Building with MinGW (MSYS2)
+
+<Steps>
+  <Step title="Install MSYS2">
+    1. Download the latest [MSYS2 installer](https://www.msys2.org/)
+    2. Run the installer and follow the instructions
+    3. Complete the installation to `C:\msys64` (default)
+  </Step>
+
+  <Step title="Install Git for Windows">
+    Download and install [Git for Windows](https://git-scm.com/download/win):
+
+    1. Install Git for Windows
+    2. Ensure it's in your Windows PATH
+    3. Edit `C:\msys64\mingw64.ini` (or `mingw32.ini` for 32-bit)
+    4. Uncomment: `MSYS2_PATH_TYPE=inherit`
+
+    <Warning>
+    You could use MSYS2's git via pacman, but it's very slow and not recommended.
+    </Warning>
+  </Step>
+
+  <Step title="Install Build Tools">
+    Start a **MINGW64** or **MINGW32** shell (from start menu or by running `C:\msys64\mingw64.exe`).
+
+    Update package mirrors:
+    ```bash
+    pacman -Sy pacman-mirrors
+    ```
+
+    Install build tools:
+
+    <Tabs>
+      <Tab title="64-bit">
+        ```bash
+        pacman -S make \
+          diffutils \
+          tar \
+          mingw-w64-x86_64-python \
+          mingw-w64-x86_64-cmake \
+          mingw-w64-x86_64-gcc \
+          mingw-w64-x86_64-ninja
+        ```
+      </Tab>
+      <Tab title="32-bit">
+        ```bash
+        pacman -S make \
+          diffutils \
+          tar \
+          mingw-w64-i686-python \
+          mingw-w64-i686-cmake \
+          mingw-w64-i686-gcc \
+          mingw-w64-i686-ninja
+        ```
+      </Tab>
+    </Tabs>
+
+    <Warning>
+    Do **NOT** use the `python2`, `cmake`, and `ninja` packages from the `msys2` subsystem. Use the `mingw-w64-*` versions instead. Builds are known to fail with msys2 subsystem packages.
+    </Warning>
+  </Step>
+
+  <Step title="Clone and Build">
+    In the MINGW64/MINGW32 shell:
+
+    ```bash
+    # Clone (or navigate to existing clone)
+    git clone https://github.com/rust-lang/rust.git
+    cd rust
+
+    # Setup and build
+    python x.py setup dist
+    python x.py build
+    python x.py install
+    ```
+  </Step>
+</Steps>
+
+### MinGW Build Tips
+
+<Tip>
+If you experience issues with LLVM builds, try using native Windows Python and CMake:
+
+1. Install Python and CMake for Windows (via winget)
+2. Remove them from the pacman command above
+3. Ensure Windows Python/CMake are in PATH (following step 2's MSYS2_PATH_TYPE setting)
+</Tip>
+
+## Advanced Configuration
+
+<AccordionGroup>
+  <Accordion title="Multi-Target Build">
+    Build for both MSVC and GNU targets:
+
+    ```toml bootstrap.toml
+    [build]
+    build = "x86_64-pc-windows-msvc"
+    target = [
+      "x86_64-pc-windows-msvc",
+      "x86_64-pc-windows-gnu",
+    ]
+    ```
+
+    Build with:
+    ```bash
+    python x.py build --target x86_64-pc-windows-gnu
+    ```
+  </Accordion>
+
+  <Accordion title="Optimized Build Configuration">
+    ```toml bootstrap.toml
+    [build]
+    build = "x86_64-pc-windows-msvc"
+    extended = true
+    tools = ["cargo", "clippy", "rustfmt", "rust-analyzer"]
+
+    # Use all CPU cores
+    jobs = 0
+
+    [llvm]
+    # Download instead of building
+    download-ci-llvm = true
+
+    # If building LLVM, use Ninja
+    ninja = true
+
+    [rust]
+    channel = "dev"
+    debug-assertions = true
+
+    # Enable incremental compilation
+    incremental = true
+    ```
+  </Accordion>
+
+  <Accordion title="Cross-Compiling Between ABIs">
+    To use GNU ABI from PowerShell or MSVC ABI from MINGW:
+
+    ```bash
+    # From any environment
+    python x.py build --build=x86_64-pc-windows-gnu
+    # or
+    python x.py build --build=x86_64-pc-windows-msvc
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Building Documentation
+
+Build Rust documentation:
+
+```powershell
+python x.py doc
+```
+
+Documentation will be generated in:
+```
+build\x86_64-pc-windows-msvc\doc
+```
+
+Or for GNU builds:
+```
+build\x86_64-pc-windows-gnu\doc
+```
+
+## Testing Your Build
+
+<CodeGroup>
+```powershell Check Build
+python x.py check
+```
+
+```powershell Run Tests
+# Quick tests
+python x.py test tests/ui
+
+# Full test suite (very slow)
+python x.py test
+```
+
+```powershell Try Built Compiler
+# MSVC build
+.\build\x86_64-pc-windows-msvc\stage1\bin\rustc.exe --version
+
+# GNU build
+.\build\x86_64-pc-windows-gnu\stage1\bin\rustc.exe --version
+```
+</CodeGroup>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Python Not Found">
+    Ensure Python is in your PATH:
+
+    ```powershell
+    # Check Python
+    python --version
+
+    # If not found, add to PATH or use full path
+    C:\Python312\python.exe x.py build
+    ```
+  </Accordion>
+
+  <Accordion title="Git Submodule Errors">
+    Update submodules:
+
+    ```powershell
+    git submodule update --init --recursive
+    ```
+  </Accordion>
+
+  <Accordion title="Long Path Issues">
+    Windows has a 260-character path limit by default. Enable long paths:
+
+    1. Run as Administrator:
+    ```powershell
+    New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
+      -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+    ```
+
+    2. Or use Group Policy Editor (gpedit.msc):
+       - Computer Configuration → Administrative Templates → System → Filesystem
+       - Enable "Enable Win32 long paths"
+  </Accordion>
+
+  <Accordion title="Out of Memory">
+    Reduce parallel jobs:
+
+    ```powershell
+    python x.py build -j 1
+    ```
+
+    Or limit LLVM linker jobs:
+    ```toml
+    [llvm]
+    link-jobs = 1
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration Options" icon="sliders" href="/building/configuration">
+    Explore all available build configuration options
+  </Card>
+  <Card title="Dependencies Reference" icon="download" href="/building/dependencies">
+    Detailed dependency information
+  </Card>
+</CardGroup>

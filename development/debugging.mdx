@@ -1,0 +1,720 @@
+---
+title: Debugging the Compiler
+description: Techniques and tools for debugging the Rust compiler, including ICEs, crashes, and miscompilations
+---
+
+This guide covers debugging techniques for the Rust compiler itself, from internal compiler errors (ICEs) to miscompilations and performance issues.
+
+## Types of Compiler Issues
+
+<CardGroup cols={2}>
+  <Card title="ICE (Internal Compiler Error)" icon="triangle-exclamation">
+    The compiler panicked - this is always a bug
+  </Card>
+  <Card title="Miscompilation" icon="code">
+    Incorrect code generation - produces wrong results
+  </Card>
+  <Card title="Compile-time Error" icon="xmark">
+    False positive or incorrect error message
+  </Card>
+  <Card title="Performance Regression" icon="gauge">
+    Compilation takes too long or uses too much memory
+  </Card>
+</CardGroup>
+
+## Setting Up for Debugging
+
+<Steps>
+  <Step title="Build with debug symbols">
+    Configure `config.toml` for debugging:
+
+    ```toml
+    [rust]
+    # Enable debug assertions
+    debug = true
+    debug-assertions = true
+    debug-assertions-std = true
+    
+    # Debug info for the compiler
+    debuginfo-level = 1
+    debuginfo-level-rustc = 1
+    debuginfo-level-std = 1
+    
+    # Backtrace on ICE
+    backtrace-on-ice = true
+    
+    # Enable debug logging
+    debug-logging = true
+    ```
+  </Step>
+
+  <Step title="Build the debug compiler">
+    ```bash
+    # Build stage 1 with debug info
+    ./x.py build --stage 1
+    
+    # Or use the stage 0 compiler for faster iteration
+    ./x.py build --stage 0 library/std
+    ```
+  </Step>
+
+  <Step title="Set up debugging tools">
+    <Tabs>
+      <Tab title="GDB">
+        ```bash
+        # Install GDB
+        sudo apt-get install gdb
+        
+        # Set in config.toml
+        [build]
+        gdb = "gdb"
+        ```
+      </Tab>
+      <Tab title="LLDB">
+        ```bash
+        # Install LLDB
+        brew install llvm  # macOS
+        
+        # Set in config.toml
+        [build]
+        lldb = "lldb"
+        ```
+      </Tab>
+      <Tab title="RR">
+        ```bash
+        # Install rr (record and replay debugger)
+        sudo apt-get install rr
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+## Debugging Internal Compiler Errors (ICEs)
+
+### Reproducing an ICE
+
+<Steps>
+  <Step title="Create a minimal test case">
+    Create a file that triggers the ICE:
+
+    ```rust
+    // ice.rs
+    fn main() {
+        // Minimal code that triggers the ICE
+    }
+    ```
+  </Step>
+
+  <Step title="Compile with backtrace">
+    ```bash
+    # Set environment variable
+    export RUST_BACKTRACE=1
+    
+    # Compile the test case
+    rustc ice.rs
+    
+    # Or with your stage 1 compiler
+    ./build/x86_64-unknown-linux-gnu/stage1/bin/rustc ice.rs
+    ```
+  </Step>
+
+  <Step title="Get detailed backtrace">
+    ```bash
+    # Full backtrace with RUST_BACKTRACE=full
+    RUST_BACKTRACE=full rustc ice.rs
+    
+    # With additional logging
+    RUSTC_LOG=debug rustc ice.rs 2>&1 | tee debug.log
+    ```
+  </Step>
+</Steps>
+
+### Using GDB with the Compiler
+
+<Tabs>
+  <Tab title="Basic GDB">
+    ```bash
+    # Start rustc under GDB
+    gdb --args ./build/stage1/bin/rustc ice.rs
+    
+    # In GDB:
+    (gdb) run
+    # Wait for crash
+    (gdb) backtrace
+    (gdb) info locals
+    (gdb) frame 3
+    (gdb) print variable_name
+    ```
+  </Tab>
+
+  <Tab title="Breakpoints">
+    ```bash
+    gdb --args rustc ice.rs
+    
+    # Set breakpoint on function
+    (gdb) break rustc_middle::ty::context::TyCtxt::create_and_enter
+    (gdb) run
+    
+    # Set breakpoint on panic
+    (gdb) break rust_panic
+    (gdb) run
+    
+    # Conditional breakpoint
+    (gdb) break file.rs:123 if variable == 5
+    ```
+  </Tab>
+
+  <Tab title="Advanced">
+    ```bash
+    # Use rr for record and replay
+    rr record ./build/stage1/bin/rustc ice.rs
+    rr replay
+    
+    # In replay mode, you can reverse-execute
+    (rr) reverse-continue
+    (rr) reverse-step
+    ```
+  </Tab>
+</Tabs>
+
+### Debugging with LLDB
+
+<CodeGroup>
+```bash Basic LLDB
+# Start rustc under LLDB
+lldb ./build/stage1/bin/rustc -- ice.rs
+
+# In LLDB:
+(lldb) run
+# Wait for crash
+(lldb) bt
+(lldb) frame variable
+(lldb) frame select 3
+```
+
+```bash Breakpoints
+(lldb) breakpoint set --name rust_panic
+(lldb) breakpoint set --file ty.rs --line 123
+(lldb) run
+
+# Conditional breakpoint
+(lldb) breakpoint set --name function_name -c 'variable == 5'
+```
+
+```bash Pretty Printing
+# Enable Rust pretty printers
+(lldb) type summary add --summary-string "${var.ptr}" "core::ptr::*"
+(lldb) frame variable
+```
+</CodeGroup>
+
+## Debug Logging
+
+### Using RUSTC_LOG
+
+The compiler has extensive debug logging:
+
+<Tabs>
+  <Tab title="Basic Logging">
+    ```bash
+    # Enable all debug logs
+    RUSTC_LOG=debug rustc file.rs
+    
+    # Specific module
+    RUSTC_LOG=rustc_middle::ty=debug rustc file.rs
+    
+    # Multiple modules
+    RUSTC_LOG=rustc_borrowck=debug,rustc_mir=trace rustc file.rs
+    ```
+  </Tab>
+
+  <Tab title="Query Logging">
+    ```bash
+    # Log all queries
+    RUSTC_LOG=rustc_query_impl=debug rustc file.rs
+    
+    # Log specific query
+    RUSTC_LOG=rustc_query_impl::queries::type_of=trace rustc file.rs
+    
+    # With timestamps
+    RUSTC_LOG_COLOR=always RUSTC_LOG=debug rustc file.rs
+    ```
+  </Tab>
+
+  <Tab title="Filtering">
+    ```bash
+    # Only errors and warnings
+    RUSTC_LOG=warn rustc file.rs
+    
+    # Everything except noise
+    RUSTC_LOG=debug,rustc_metadata=info rustc file.rs
+    
+    # Save to file
+    RUSTC_LOG=debug rustc file.rs 2>&1 | tee debug.log
+    ```
+  </Tab>
+</Tabs>
+
+### Compiler Flags for Debugging
+
+<CodeGroup>
+```bash Dump Options
+# Dump HIR
+rustc -Z unpretty=hir-tree file.rs
+
+# Dump MIR
+rustc -Z dump-mir=all file.rs
+
+# Dump MIR for specific function
+rustc -Z dump-mir=main file.rs
+
+# Dump LLVM IR
+rustc --emit=llvm-ir file.rs
+```
+
+```bash Debug Info
+# Print type info
+rustc -Z print-type-sizes file.rs
+
+# Print mono items
+rustc -Z print-mono-items=lazy file.rs
+
+# Verbose output
+rustc -v file.rs
+```
+
+```bash Query Debugging
+# Track query execution
+rustc -Z query-dep-graph file.rs
+
+# Time queries
+rustc -Z time-passes file.rs
+
+# Self-profile
+rustc -Z self-profile file.rs
+```
+</CodeGroup>
+
+## Debugging Specific Components
+
+### Borrow Checker
+
+<Tabs>
+  <Tab title="NLL Debugging">
+    ```bash
+    # Dump NLL facts
+    rustc -Z dump-mir=all -Z dump-mir-dir=mir_dump file.rs
+    
+    # Polonius facts
+    rustc -Z polonius -Z dump-mir=all file.rs
+    
+    # Borrow check logging
+    RUSTC_LOG=rustc_borrowck=debug rustc file.rs
+    ```
+  </Tab>
+
+  <Tab title="Borrow Errors">
+    ```bash
+    # Explain borrow check errors
+    rustc -Z teach file.rs
+    
+    # Verbose borrow check
+    RUSTC_LOG=rustc_borrowck::diagnostics=trace rustc file.rs
+    ```
+  </Tab>
+</Tabs>
+
+### Type Checker
+
+<CodeGroup>
+```bash Type Debugging
+# Type checking logs
+RUSTC_LOG=rustc_hir_analysis=debug rustc file.rs
+
+# Trait resolution
+RUSTC_LOG=rustc_trait_selection=debug rustc file.rs
+
+# Print trait solver tree
+rustc -Z dump-solver-proof-tree file.rs
+```
+
+```bash Trait Debugging
+# Verbose trait selection
+RUSTC_LOG=rustc_trait_selection::traits::select=trace rustc file.rs
+
+# Dump trait obligations
+RUSTC_LOG=rustc_trait_selection::traits::fulfill=debug rustc file.rs
+```
+</CodeGroup>
+
+### Code Generation
+
+<Tabs>
+  <Tab title="LLVM Backend">
+    ```bash
+    # LLVM module dump
+    rustc --emit=llvm-ir -C llvm-args=-print-after-all file.rs
+    
+    # LLVM optimization remarks
+    rustc -C llvm-args="-pass-remarks=inline" file.rs
+    
+    # Disable optimizations
+    rustc -C opt-level=0 file.rs
+    ```
+  </Tab>
+
+  <Tab title="MIR Optimization">
+    ```bash
+    # Dump MIR before and after optimizations
+    rustc -Z dump-mir=all -Z dump-mir-dir=mir file.rs
+    
+    # Disable MIR optimizations
+    rustc -Z mir-opt-level=0 file.rs
+    
+    # Specific MIR pass
+    RUSTC_LOG=rustc_mir_transform=debug rustc file.rs
+    ```
+  </Tab>
+
+  <Tab title="Codegen Units">
+    ```bash
+    # Single codegen unit
+    rustc -C codegen-units=1 file.rs
+    
+    # List codegen units
+    rustc -Z print-mono-items=lazy file.rs
+    ```
+  </Tab>
+</Tabs>
+
+## Debugging Tests
+
+### Running Individual Tests
+
+<Steps>
+  <Step title="Find the failing test">
+    ```bash
+    # Run UI tests
+    ./x.py test tests/ui
+    
+    # Find specific test
+    ./x.py test tests/ui --test-args my-test
+    ```
+  </Step>
+
+  <Step title="Run with verbose output">
+    ```bash
+    # Verbose test output
+    ./x.py test tests/ui/my-test.rs --test-args --verbose
+    
+    # Show compiler output
+    ./x.py test tests/ui/my-test.rs --test-args --nocapture
+    ```
+  </Step>
+
+  <Step title="Debug the test">
+    ```bash
+    # Get the rustc command from test output
+    # Then run it manually:
+    RUST_BACKTRACE=1 ./build/stage1/bin/rustc tests/ui/my-test.rs
+    
+    # Or under GDB:
+    gdb --args ./build/stage1/bin/rustc tests/ui/my-test.rs
+    ```
+  </Step>
+</Steps>
+
+### Updating Test Expectations
+
+<CodeGroup>
+```bash UI Tests
+# Update stderr expectations
+./x.py test tests/ui --bless
+
+# Update specific test
+./x.py test tests/ui/my-test.rs --bless
+```
+
+```bash MIR Tests
+# Update MIR dumps
+./x.py test tests/mir-opt --bless
+```
+
+```bash Debuginfo Tests
+# Update debuginfo tests
+./x.py test tests/debuginfo --bless
+```
+</CodeGroup>
+
+## Debugging Miscompilations
+
+### Isolating the Problem
+
+<Steps>
+  <Step title="Create minimal reproducer">
+    Reduce the code to the smallest example that shows the bug:
+
+    ```bash
+    # Use cargo-minimize or manual reduction
+    cargo install cargo-minimize
+    cargo minimize --bin my-bin
+    ```
+  </Step>
+
+  <Step title="Identify optimization level">
+    ```bash
+    # Test different optimization levels
+    rustc -C opt-level=0 file.rs  # No optimization
+    rustc -C opt-level=1 file.rs  # Basic
+    rustc -C opt-level=2 file.rs  # Default
+    rustc -C opt-level=3 file.rs  # Aggressive
+    ```
+  </Step>
+
+  <Step title="Check MIR vs LLVM">
+    ```bash
+    # Dump MIR
+    rustc -Z dump-mir=all file.rs
+    
+    # Dump LLVM IR
+    rustc --emit=llvm-ir file.rs
+    
+    # Compare optimized vs unoptimized
+    rustc -C opt-level=0 --emit=llvm-ir -o unopt.ll file.rs
+    rustc -C opt-level=2 --emit=llvm-ir -o opt.ll file.rs
+    diff unopt.ll opt.ll
+    ```
+  </Step>
+
+  <Step title="Bisect to find the culprit">
+    ```bash
+    # Use cargo-bisect-rustc to find regression
+    cargo install cargo-bisect-rustc
+    cargo bisect-rustc --start 2024-01-01 --end 2024-06-01
+    ```
+  </Step>
+</Steps>
+
+### Tools for Miscompilations
+
+<CardGroup cols={2}>
+  <Card title="Miri" icon="magnifying-glass">
+    Detect undefined behavior:
+    ```bash
+    cargo +nightly miri test
+    cargo +nightly miri run
+    ```
+  </Card>
+
+  <Card title="Sanitizers" icon="shield">
+    Detect memory errors:
+    ```bash
+    RUSTFLAGS="-Z sanitizer=address" cargo build
+    RUSTFLAGS="-Z sanitizer=memory" cargo build
+    ```
+  </Card>
+
+  <Card title="Valgrind" icon="microscope">
+    Memory debugging:
+    ```bash
+    valgrind --leak-check=full ./target/debug/binary
+    ```
+  </Card>
+
+  <Card title="cargo-bisect-rustc" icon="code-branch">
+    Find regressions:
+    ```bash
+    cargo bisect-rustc
+    ```
+  </Card>
+</CardGroup>
+
+## Advanced Debugging Techniques
+
+### Using LLVM Tools
+
+<Tabs>
+  <Tab title="llvm-dis">
+    ```bash
+    # Disassemble bitcode
+    llvm-dis output.bc -o output.ll
+    ```
+  </Tab>
+
+  <Tab title="llvm-opt">
+    ```bash
+    # Run specific LLVM passes
+    opt -O2 input.ll -o output.ll
+    opt -print-after-all input.ll 2>&1 | less
+    ```
+  </Tab>
+
+  <Tab title="llvm-objdump">
+    ```bash
+    # Disassemble binary
+    llvm-objdump -d binary
+    llvm-objdump -S binary  # With source
+    ```
+  </Tab>
+</Tabs>
+
+### Query System Debugging
+
+<CodeGroup>
+```bash Query Traces
+# Track query execution
+RUSTC_LOG=rustc_query_system::query::plumbing=debug rustc file.rs
+
+# Query dependencies
+rustc -Z dump-dep-graph file.rs
+```
+
+```bash Incremental Compilation
+# Debug incremental compilation
+RUSTC_LOG=rustc_incremental=debug rustc file.rs
+
+# Clear incremental cache
+rm -rf target/debug/incremental
+```
+</CodeGroup>
+
+### Memory Debugging
+
+<Tabs>
+  <Tab title="Massif (Heap Profiler)">
+    ```bash
+    # Profile heap usage
+    valgrind --tool=massif ./build/stage1/bin/rustc file.rs
+    
+    # Visualize with massif-visualizer
+    massif-visualizer massif.out.12345
+    ```
+  </Tab>
+
+  <Tab title="DHAT (Heap Analyzer)">
+    ```bash
+    # Analyze heap allocations
+    valgrind --tool=dhat ./build/stage1/bin/rustc file.rs
+    ```
+  </Tab>
+</Tabs>
+
+## Common Debugging Scenarios
+
+<AccordionGroup>
+  <Accordion title="Debugging a panic in the compiler">
+    ```bash
+    # Set backtrace
+    export RUST_BACKTRACE=1
+    
+    # Enable panic logging
+    export RUSTC_LOG=debug
+    
+    # Run under debugger
+    gdb --args ./build/stage1/bin/rustc file.rs
+    (gdb) break rust_panic
+    (gdb) run
+    ```
+  </Accordion>
+
+  <Accordion title="Debugging why compilation is slow">
+    ```bash
+    # Time each pass
+    rustc -Z time-passes file.rs
+    
+    # Self-profile
+    rustc -Z self-profile file.rs
+    
+    # Analyze with measureme
+    cargo install measureme
+    crox file-pid.mm_profdata
+    ```
+  </Accordion>
+
+  <Accordion title="Debugging a type error">
+    ```bash
+    # Enable type logging
+    RUSTC_LOG=rustc_hir_analysis::check=debug rustc file.rs
+    
+    # Dump type information
+    rustc -Z print-type-sizes file.rs
+    ```
+  </Accordion>
+
+  <Accordion title="Debugging a borrow check error">
+    ```bash
+    # Enable borrow check logging
+    RUSTC_LOG=rustc_borrowck=debug rustc file.rs
+    
+    # Dump NLL facts
+    rustc -Z dump-mir=all file.rs
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Debugging Checklist
+
+<Steps>
+  <Step title="Reproduce the issue">
+    - [ ] Create minimal test case
+    - [ ] Verify it reproduces consistently
+    - [ ] Note exact compiler version
+  </Step>
+
+  <Step title="Gather information">
+    - [ ] Get full backtrace
+    - [ ] Enable debug logging
+    - [ ] Check for similar issues
+  </Step>
+
+  <Step title="Isolate the problem">
+    - [ ] Identify which compiler pass fails
+    - [ ] Check if it's a recent regression
+    - [ ] Test with different flags
+  </Step>
+
+  <Step title="Debug">
+    - [ ] Use appropriate debugging tool
+    - [ ] Set breakpoints at key locations
+    - [ ] Inspect relevant data structures
+  </Step>
+
+  <Step title="Fix and test">
+    - [ ] Implement fix
+    - [ ] Add regression test
+    - [ ] Verify fix doesn't break other tests
+  </Step>
+</Steps>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Debugging Chapter" icon="book" href="https://rustc-dev-guide.rust-lang.org/debugging.html">
+    Rustc dev guide debugging section
+  </Card>
+  
+  <Card title="GDB Tutorial" icon="terminal" href="https://sourceware.org/gdb/documentation/">
+    GDB documentation
+  </Card>
+  
+  <Card title="LLDB Tutorial" icon="apple" href="https://lldb.llvm.org/use/tutorial.html">
+    LLDB tutorial
+  </Card>
+  
+  <Card title="Zulip #t-compiler" icon="comments" href="https://rust-lang.zulipchat.com/#narrow/stream/131828-t-compiler">
+    Ask for help on Zulip
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Profiling" icon="chart-line" href="/development/profiling">
+    Learn about profiling the compiler
+  </Card>
+  
+  <Card title="Compiler Development" icon="gears" href="/development/compiler-development">
+    Return to compiler development guide
+  </Card>
+</CardGroup>

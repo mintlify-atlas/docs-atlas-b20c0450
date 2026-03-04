@@ -1,0 +1,455 @@
+---
+title: Incremental Compilation
+description: How rustc achieves fast rebuilds through incremental compilation and dependency tracking
+---
+
+Incremental compilation is one of the most important performance features of the Rust compiler. It allows the compiler to reuse results from previous compilations, dramatically reducing rebuild times when only small changes are made to the code.
+
+<Info>
+The incremental compilation system tracks dependencies between different parts of the compilation process and only recompiles what's necessary when source code changes.
+</Info>
+
+## How Incremental Compilation Works
+
+Incremental compilation is built on the compiler's query system:
+
+<Steps>
+  <Step title="Query System">
+    The compiler is structured as a collection of queries (e.g., "what is the type of this function?", "what is the MIR for this function?").
+  </Step>
+  
+  <Step title="Dependency Tracking">
+    As queries execute, the system tracks which queries depend on which other queries.
+  </Step>
+  
+  <Step title="Result Caching">
+    Query results are cached to disk along with dependency information.
+  </Step>
+  
+  <Step title="Invalidation">
+    When source code changes, only queries whose inputs have changed are invalidated.
+  </Step>
+  
+  <Step title="Reuse">
+    Unchanged queries reuse their cached results instead of recomputing.
+  </Step>
+</Steps>
+
+## The Dependency Graph
+
+The `rustc_incremental` crate manages the dependency graph:
+
+```rust
+// Support for serializing the dep-graph and reloading it
+
+pub use persist::{
+    LoadResult,
+    setup_dep_graph,
+    save_dep_graph,
+    load_query_result_cache,
+    finalize_session_directory,
+    in_incr_comp_dir,
+    copy_cgu_workproduct_to_incr_comp_cache_dir,
+};
+```
+
+### Dependency Graph Structure
+
+The dependency graph tracks relationships between queries:
+
+```
+┌─────────────────┐
+│  Source File    │
+│  Changes        │
+└────────┬────────┘
+         │
+         v
+┌─────────────────┐
+│  Parse Query    │  ← Invalidated
+└────────┬────────┘
+         │
+         v
+┌─────────────────┐
+│  Type Check     │  ← Invalidated
+│  Query          │
+└────────┬────────┘
+         │
+         v
+┌─────────────────┐
+│  MIR Query      │  ← Invalidated
+└────────┬────────┘
+         │
+         v
+┌─────────────────┐
+│  Codegen Query  │  ← Invalidated
+└─────────────────┘
+
+┌─────────────────┐
+│  Unchanged      │
+│  Function       │  ← Reused from cache!
+└─────────────────┘
+```
+
+## Query System
+
+The query system is the foundation of incremental compilation:
+
+<Note>
+Every computation in the compiler that should be cached is expressed as a query. Queries are pure functions of their inputs and the type context.
+</Note>
+
+### Query Definition
+
+Queries are defined in `rustc_middle`:
+
+```rust
+// Example query definitions:
+
+/// Get the MIR for a function
+query mir_built(key: LocalDefId) -> &'tcx Steal<Body<'tcx>> {
+    storage(ArenaCacheSelector<'tcx>)
+    cache_on_disk_if { true }
+}
+
+/// Type check a function
+query type_of(key: DefId) -> Ty<'tcx> {
+    cache_on_disk_if { key.is_local() }
+}
+
+/// Get optimized MIR
+query optimized_mir(key: DefId) -> &'tcx Body<'tcx> {
+    storage(ArenaCacheSelector<'tcx>)
+    cache_on_disk_if { key.is_local() }
+}
+```
+
+### Query Execution
+
+When a query is executed:
+
+<Accordion title="Check Cache">
+  First, check if a valid cached result exists from a previous compilation.
+</Accordion>
+
+<Accordion title="Track Dependencies">
+  If recomputing, track all other queries that are invoked during execution.
+</Accordion>
+
+<Accordion title="Compute Result">
+  Execute the query function to compute the result.
+</Accordion>
+
+<Accordion title="Cache Result">
+  Store the result and its dependencies for future compilations.
+</Accordion>
+
+## Fingerprinting
+
+The compiler uses fingerprints (hashes) to detect changes:
+
+```rust
+// Each node in the dependency graph has a fingerprint
+// Fingerprints are computed from:
+// - The query inputs
+// - The query result
+// - The source code
+
+struct DepNode {
+    kind: DepKind,
+    hash: Fingerprint,
+}
+```
+
+<Info>
+Fingerprints allow the compiler to quickly determine if a query's inputs or results have changed without comparing the full data structures.
+</Info>
+
+## Incremental Directory
+
+Incremental compilation data is stored in the target directory:
+
+```
+target/
+└── debug/
+    └── incremental/
+        └── myproject-<hash>/
+            ├── s-<session-id>.lock
+            └── <work-product-id>/
+                ├── dep-graph.bin
+                ├── query-cache.bin
+                └── work-products.bin
+```
+
+### Stored Data
+
+<CardGroup cols={2}>
+  <Card title="Dependency Graph">
+    Complete graph of query dependencies from the previous compilation
+  </Card>
+  <Card title="Query Results">
+    Cached results for queries that can be reused
+  </Card>
+  <Card title="Work Products">
+    Compiled artifacts like object files that can be reused
+  </Card>
+  <Card title="Source Hashes">
+    Fingerprints of source files to detect changes
+  </Card>
+</CardGroup>
+
+## Session Directory Management
+
+The compiler manages incremental compilation sessions:
+
+```rust
+pub fn setup_dep_graph(
+    tcx: TyCtxt<'_>,
+) -> Result<LoadResult, ErrorGuaranteed> {
+    // Load previous dependency graph if it exists
+    // Set up tracking for current compilation
+}
+
+pub fn save_dep_graph(tcx: TyCtxt<'_>) {
+    // Save dependency graph to disk
+    // Save query results cache
+    // Clean up old session directories
+}
+
+pub fn finalize_session_directory(
+    tcx: TyCtxt<'_>,
+) {
+    // Mark session as complete
+    // Copy work products to cache
+}
+```
+
+## Granularity
+
+Incremental compilation works at different levels of granularity:
+
+### Function-Level
+
+```rust
+fn foo() { /* ... */ }
+fn bar() { /* change here */ }
+fn baz() { /* ... */ }
+
+// Only `bar` and its dependents are recompiled
+// `foo` and `baz` are reused if they don't depend on `bar`
+```
+
+### Item-Level
+
+```rust
+struct MyStruct {
+    field: i32,  // change here
+}
+
+// Functions using MyStruct are recompiled
+// Unrelated items are reused
+```
+
+### Module-Level
+
+```rust
+mod my_module {
+    // changes here...
+}
+
+// Only items that depend on my_module are recompiled
+```
+
+## Red-Green Algorithm
+
+The incremental compilation system uses a "red-green" algorithm:
+
+<Steps>
+  <Step title="Mark Changed Nodes Red">
+    When source code changes, mark the corresponding dependency graph nodes as "red" (changed).
+  </Step>
+  
+  <Step title="Propagate Red">
+    Mark all nodes that depend on red nodes as potentially changed.
+  </Step>
+  
+  <Step title="Verify Green">
+    For each potentially changed node, check if its inputs actually changed. If not, mark it "green" (unchanged).
+  </Step>
+  
+  <Step title="Recompute Red Nodes">
+    Only recompute nodes that are definitively red.
+  </Step>
+</Steps>
+
+<Note>
+This algorithm minimizes recompilation by distinguishing between "changed" and "affected by changes" nodes.
+</Note>
+
+## Optimization Strategies
+
+The incremental compilation system includes several optimizations:
+
+### Work Product Reuse
+
+```rust
+pub fn copy_cgu_workproduct_to_incr_comp_cache_dir(
+    tcx: TyCtxt<'_>,
+    cgu_name: &str,
+    files: &[(WorkProductFileKind, PathBuf)],
+) -> Result<(), ErrorGuaranteed> {
+    // Copy compiled object files to cache
+    // These can be reused if the CGU hasn't changed
+}
+```
+
+Codegen units (CGUs) that haven't changed can skip the entire LLVM compilation phase.
+
+### Query Result Packing
+
+Query results are efficiently packed and compressed for storage:
+
+```rust
+// Query results are serialized using efficient encoding
+// Large results are compressed
+// Frequently accessed results are kept in memory
+```
+
+### Parallel Loading
+
+The dependency graph and query cache are loaded in parallel:
+
+```rust
+pub fn load_query_result_cache(
+    tcx: TyCtxt<'_>,
+) {
+    // Load cached query results in parallel
+    // Decompress and deserialize efficiently
+}
+```
+
+## Limitations and Edge Cases
+
+Incremental compilation has some limitations:
+
+<Accordion title="Proc Macros">
+  Procedural macros can break incremental compilation if they have side effects or depend on external state.
+</Accordion>
+
+<Accordion title="Build Scripts">
+  Changes to build.rs files require full recompilation of the affected crate.
+</Accordion>
+
+<Accordion title="Compiler Flags">
+  Changing compiler flags or features requires full recompilation.
+</Accordion>
+
+<Accordion title="External Dependencies">
+  Changes to dependencies require recompiling the affected parts of the crate.
+</Accordion>
+
+## Using Incremental Compilation
+
+Incremental compilation is enabled by default for debug builds:
+
+```bash
+# Enabled by default for debug builds
+cargo build
+
+# Force enable for release builds (slower but incremental)
+cargo build --release -Z incremental
+
+# Disable incremental compilation
+CARGO_INCREMENTAL=0 cargo build
+
+# Clean incremental cache
+cargo clean -p myproject
+```
+
+### Configuration
+
+```toml
+# In Cargo.toml
+[profile.dev]
+incremental = true  # Default
+
+[profile.release]
+incremental = false  # Default
+```
+
+## Performance Impact
+
+Incremental compilation dramatically improves rebuild times:
+
+<CardGroup cols={2}>
+  <Card title="Small Changes">
+    90-99% faster rebuilds when changing a single function
+  </Card>
+  <Card title="Medium Changes">
+    50-80% faster when changing multiple related items
+  </Card>
+  <Card title="Large Changes">
+    Still provides benefits even with widespread changes
+  </Card>
+  <Card title="Cold Build">
+    Slight overhead (5-10%) on initial build due to tracking
+  </Card>
+</CardGroup>
+
+## Debugging Incremental Compilation
+
+Several tools help debug incremental compilation:
+
+```bash
+# Verbose incremental compilation output
+RUSTC_LOG=rustc_incremental=debug cargo build
+
+# Dump dependency graph
+rustc -Z dump-dep-graph main.rs
+
+# Assert dependency graph structure
+rustc -Z query-dep-graph main.rs
+
+# Verify incremental compilation
+RUSTC_INCREMENTAL_VERIFY_ICH=1 cargo build
+```
+
+## Future Improvements
+
+The incremental compilation system continues to evolve:
+
+- Better handling of proc macros
+- Cross-crate incremental compilation
+- Improved cache compression
+- Faster dependency graph operations
+- More granular invalidation
+
+## Best Practices
+
+<Steps>
+  <Step title="Structure Code Well">
+    Well-structured code with clear module boundaries benefits more from incremental compilation.
+  </Step>
+  
+  <Step title="Avoid Global State">
+    Minimize global state and constants that many items depend on.
+  </Step>
+  
+  <Step title="Use Cargo Workspaces">
+    Split large projects into workspace members for better incremental compilation.
+  </Step>
+  
+  <Step title="Keep Dependencies Updated">
+    Use compatible version ranges to avoid unnecessary recompilation.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Compiler Overview" href="/compiler/overview">
+    Return to the compiler architecture overview
+  </Card>
+  <Card title="MIR" href="/compiler/mir">
+    Learn about the intermediate representation
+  </Card>
+</CardGroup>

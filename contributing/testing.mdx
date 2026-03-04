@@ -1,0 +1,605 @@
+---
+title: "Testing Guidelines"
+description: "Comprehensive guide to writing, running, and debugging tests in the Rust compiler project"
+---
+
+Testing is a critical part of the Rust compiler development process. This guide covers the comprehensive testing infrastructure used in the project.
+
+<Note>
+For detailed information about the compiler testing framework, see the [rustc-dev-guide testing section](https://rustc-dev-guide.rust-lang.org/tests/intro.html).
+</Note>
+
+## Test Suite Overview
+
+The Rust compiler project includes multiple test suites, each serving different purposes:
+
+| Test Suite | Purpose | Location |
+|------------|---------|----------|
+| **ui** | Compile-fail and run-pass tests with error output verification | `tests/ui/` |
+| **run-make** | Complex tests using Makefiles | `tests/run-make/` |
+| **codegen** | LLVM IR generation tests | `tests/codegen-llvm/` |
+| **assembly** | Assembly output tests | `tests/assembly-llvm/` |
+| **mir-opt** | MIR optimization tests | `tests/mir-opt/` |
+| **debuginfo** | Debug information tests | `tests/debuginfo/` |
+| **rustdoc** | Documentation generation tests | `tests/rustdoc-html/`, `tests/rustdoc-ui/` |
+| **incremental** | Incremental compilation tests | `tests/incremental/` |
+| **coverage** | Code coverage tests | `tests/coverage/` |
+
+## Running Tests
+
+### Basic Test Commands
+
+<Tabs>
+  <Tab title="All Tests">
+    Run the entire test suite (takes several hours):
+
+    ```bash
+    ./x.py test
+    ```
+
+    <Warning>
+    Running all tests takes significant time and resources. Use more targeted approaches during development.
+    </Warning>
+  </Tab>
+
+  <Tab title="Specific Suite">
+    Run a specific test suite:
+
+    ```bash
+    # UI tests (most common)
+    ./x.py test tests/ui
+
+    # Run-make tests
+    ./x.py test tests/run-make
+
+    # MIR optimization tests
+    ./x.py test tests/mir-opt
+    ```
+  </Tab>
+
+  <Tab title="Single Test">
+    Run a specific test file:
+
+    ```bash
+    # Run a specific UI test
+    ./x.py test tests/ui/issues/issue-12345.rs
+
+    # Run tests matching a pattern
+    ./x.py test tests/ui --test-args pattern
+    ```
+  </Tab>
+
+  <Tab title="Fast Check">
+    Quick checks without running the full test suite:
+
+    ```bash
+    # Check if code compiles
+    ./x.py check
+
+    # Run tidy (formatting and style checks)
+    ./x.py test tidy
+    ```
+  </Tab>
+</Tabs>
+
+### Test Flags and Options
+
+<CodeGroup>
+```bash Parallel Execution
+# Run with specific number of threads
+./x.py test tests/ui --test-args --test-threads=4
+```
+
+```bash Verbose Output
+# Show detailed test output
+./x.py test tests/ui --verbose
+```
+
+```bash Bless Mode
+# Update test expectations (UI tests)
+./x.py test tests/ui --bless
+```
+
+```bash Stage Selection
+# Test with specific stage compiler
+./x.py test --stage 1 tests/ui
+```
+</CodeGroup>
+
+## Writing UI Tests
+
+UI tests are the most common type of test. They verify compiler output, including error messages.
+
+### Basic UI Test Structure
+
+Create a test file in `tests/ui/`:
+
+```rust filename="tests/ui/issues/issue-12345.rs"
+// Test for issue #12345: ICE with associated types in trait bounds
+
+trait MyTrait {
+    type Assoc;
+}
+
+fn foo<T: MyTrait<Assoc = i32>>() {
+    // This should compile without ICE
+}
+
+fn main() {}
+```
+
+### Test Directives
+
+Use special comments to control test behavior:
+
+<AccordionGroup>
+  <Accordion title="Compilation Behavior">
+    ```rust
+    // compile-flags: -O -C no-prepopulate-passes
+    // check-pass
+    // build-pass
+    // run-pass
+    // compile-fail
+    ```
+  </Accordion>
+
+  <Accordion title="Error Checking">
+    ```rust
+    fn main() {
+        let x: i32 = "string"; //~ ERROR mismatched types
+        //~| expected `i32`, found `&str`
+    }
+    ```
+
+    The `//~` markers indicate expected error locations:
+    - `//~` - Error on the same line
+    - `//~^` - Error on the previous line
+    - `//~|` - Additional error message
+  </Accordion>
+
+  <Accordion title="Target Selection">
+    ```rust
+    // only-x86_64
+    // only-windows
+    // ignore-emscripten
+    // ignore-windows
+    ```
+  </Accordion>
+
+  <Accordion title="Edition Specification">
+    ```rust
+    // edition:2021
+    // edition:2018
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Updating Test Expectations
+
+When error messages change, update expectations with "bless":
+
+```bash
+./x.py test tests/ui/issues/issue-12345.rs --bless
+```
+
+This updates the `.stderr` or `.stdout` files to match the new output.
+
+<Tip>
+Always review blessed changes carefully to ensure they're intentional improvements, not regressions.
+</Tip>
+
+## Writing Run-Make Tests
+
+For complex scenarios requiring multiple files or build steps:
+
+<Steps>
+  <Step title="Create Test Directory">
+    ```bash
+    mkdir tests/run-make/my-feature-test
+    ```
+  </Step>
+  <Step title="Write Makefile">
+    Create `tests/run-make/my-feature-test/Makefile`:
+
+    ```makefile
+    include ../tools.mk
+
+    all:
+    	$(RUSTC) --crate-type lib lib.rs
+    	$(RUSTC) --extern mylib=liblib.rlib main.rs
+    	$(call RUN,main)
+    ```
+  </Step>
+  <Step title="Add Source Files">
+    Create the necessary Rust source files in the same directory
+  </Step>
+  <Step title="Run the Test">
+    ```bash
+    ./x.py test tests/run-make/my-feature-test
+    ```
+  </Step>
+</Steps>
+
+## Codegen and Assembly Tests
+
+### Codegen Tests
+
+Verify the LLVM IR generated by rustc:
+
+```rust filename="tests/codegen-llvm/simple-optimization.rs"
+// compile-flags: -O -C no-prepopulate-passes
+
+#![crate_type = "lib"]
+
+// CHECK-LABEL: @add_one
+// CHECK: add i32 %{{.*}}, 1
+// CHECK-NEXT: ret i32
+#[no_mangle]
+pub fn add_one(x: i32) -> i32 {
+    x + 1
+}
+```
+
+### Assembly Tests
+
+Verify the generated assembly code:
+
+```rust filename="tests/assembly-llvm/asm-feature.rs"
+// assembly-output: emit-asm
+// compile-flags: -O
+// only-x86_64
+
+#![crate_type = "lib"]
+
+// CHECK-LABEL: multiply:
+// CHECK: imul
+#[no_mangle]
+pub fn multiply(a: i32, b: i32) -> i32 {
+    a * b
+}
+```
+
+## MIR Optimization Tests
+
+Test the Middle Intermediate Representation (MIR) optimizations:
+
+```rust filename="tests/mir-opt/const-prop.rs"
+// EMIT_MIR const-prop.main.ConstProp.diff
+
+fn main() {
+    let x = 2 + 2;
+    let y = x * 2;
+}
+```
+
+Run and bless:
+
+```bash
+./x.py test tests/mir-opt/const-prop.rs --bless
+```
+
+## Debugging Test Failures
+
+### Understanding Test Output
+
+When a test fails, you'll see:
+
+```
+failures:
+
+---- [ui] tests/ui/issues/issue-12345.rs stdout ----
+
+error: test compilation failed although it shouldn't!
+status: exit code: 101
+command: "/path/to/rustc" "tests/ui/issues/issue-12345.rs" ...
+--stderr-------------------------------
+error[E0308]: mismatched types
+  --> tests/ui/issues/issue-12345.rs:10:18
+   |
+10 |     let x: i32 = "string";
+   |            ---   ^^^^^^^^ expected `i32`, found `&str`
+```
+
+### Common Debugging Strategies
+
+<Tabs>
+  <Tab title="Isolate the Issue">
+    Run just the failing test:
+
+    ```bash
+    ./x.py test tests/ui/issues/issue-12345.rs --verbose
+    ```
+  </Tab>
+
+  <Tab title="Check Compiler Output">
+    Build the compiler and manually test:
+
+    ```bash
+    ./x.py build --stage 1
+    ./build/x86_64-unknown-linux-gnu/stage1/bin/rustc tests/ui/issues/issue-12345.rs
+    ```
+  </Tab>
+
+  <Tab title="Use Debug Prints">
+    Add debug output to the compiler:
+
+    ```rust
+    eprintln!("Debug: value = {:?}", value);
+    ```
+
+    Then run:
+
+    ```bash
+    ./x.py test tests/ui/issues/issue-12345.rs 2>&1 | grep "Debug:"
+    ```
+  </Tab>
+
+  <Tab title="Compare Expected Output">
+    Look at the `.stderr` or `.stdout` file:
+
+    ```bash
+    cat tests/ui/issues/issue-12345.stderr
+    ```
+
+    Compare with actual output to see differences.
+  </Tab>
+</Tabs>
+
+## Incremental Testing
+
+Test incremental compilation scenarios:
+
+```rust filename="tests/incremental/modify-struct.rs"
+// revisions: rpass1 rpass2
+
+#[cfg(rpass1)]
+struct Foo {
+    x: i32,
+}
+
+#[cfg(rpass2)]
+struct Foo {
+    x: i32,
+    y: i32,  // Added field
+}
+
+fn main() {
+    let _ = Foo { x: 0 };
+}
+```
+
+The test runs in two passes to verify incremental behavior.
+
+## Coverage Testing
+
+Test code coverage instrumentation:
+
+```rust filename="tests/coverage/basic.rs"
+// compile-flags: -C instrument-coverage
+
+fn main() {
+    covered_function();
+}
+
+fn covered_function() {
+    println!("This should be covered");
+}
+
+fn uncovered_function() {
+    println!("This should not be covered");
+}
+```
+
+## CI Testing Workflow
+
+### Local CI Simulation
+
+Before pushing, simulate what CI will run:
+
+<Steps>
+  <Step title="Tidy Check">
+    ```bash
+    ./x.py test tidy
+    ```
+    Checks formatting, license headers, and project standards
+  </Step>
+  <Step title="UI Test Suite">
+    ```bash
+    ./x.py test tests/ui
+    ```
+    Most likely to catch issues
+  </Step>
+  <Step title="Build Tests">
+    ```bash
+    ./x.py test --stage 1
+    ```
+    Full build with stage 1 compiler
+  </Step>
+</Steps>
+
+### CI Job Matrix
+
+The CI runs tests on multiple platforms defined in `.github/workflows/ci.yml`:
+
+- **Linux**: x86_64-gnu-llvm, x86_64-gnu-tools, i686-gnu
+- **Windows**: x86_64-msvc, i686-msvc, x86_64-gnu
+- **macOS**: x86_64-darwin, aarch64-darwin
+- **Cross-compilation**: Various embedded and tier 2 targets
+
+<Note>
+You can see the job matrix definition in `src/ci/github-actions/jobs.yml`, which is processed by the `citool` to calculate which jobs run.
+</Note>
+
+## Performance Testing
+
+For changes that might impact performance:
+
+### Request Performance Run
+
+On your PR, comment:
+
+```
+@rust-timer queue
+```
+
+This queues a performance comparison against the master branch.
+
+### Interpret Results
+
+The bot will report:
+- Instruction count changes
+- Wall-time changes  
+- Memory usage changes
+- Binary size changes
+
+<Warning>
+Regression of more than 1-2% in instruction counts typically needs justification or mitigation.
+</Warning>
+
+## Test Organization Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Name Tests Clearly" icon="tag">
+    Use descriptive names like `issue-12345.rs` or `trait-bound-ice.rs`
+  </Card>
+  <Card title="Keep Tests Minimal" icon="minimize">
+    Reduce test cases to the smallest reproducing example
+  </Card>
+  <Card title="Add Comments" icon="comment">
+    Explain what the test is checking and why
+  </Card>
+  <Card title="Link to Issues" icon="link">
+    Reference the issue or RFC in test comments
+  </Card>
+  <Card title="Use Correct Suite" icon="folder-tree">
+    Put tests in the appropriate suite (ui, run-make, etc.)
+  </Card>
+  <Card title="Update Expectations" icon="arrows-rotate">
+    Run with `--bless` when error messages change
+  </Card>
+</CardGroup>
+
+## Common Test Patterns
+
+### Regression Tests
+
+For bug fixes, add a regression test:
+
+```rust filename="tests/ui/issues/issue-12345.rs"
+// Regression test for issue #12345
+// This used to cause an ICE
+
+// check-pass
+
+trait MyTrait {
+    type Assoc;
+}
+
+fn foo<T: MyTrait<Assoc = i32>>() {}
+
+fn main() {}
+```
+
+### Feature Tests
+
+For new features (behind feature gates):
+
+```rust filename="tests/ui/feature-gates/feature-my-feature.rs"
+// Test that my_feature requires a feature gate
+
+fn main() {
+    my_feature_syntax(); //~ ERROR my_feature is experimental
+}
+```
+
+And the positive test:
+
+```rust filename="tests/ui/my-feature.rs"
+// Test my_feature works when enabled
+
+// check-pass
+#![feature(my_feature)]
+
+fn main() {
+    my_feature_syntax();
+}
+```
+
+## Troubleshooting
+
+### Test Won't Run
+
+<AccordionGroup>
+  <Accordion title="Stage Issues">
+    Ensure you're using the right stage:
+
+    ```bash
+    # Build stage 1 first
+    ./x.py build --stage 1
+    
+    # Then test with stage 1
+    ./x.py test --stage 1 tests/ui
+    ```
+  </Accordion>
+
+  <Accordion title="Platform-Specific Tests">
+    Some tests only run on specific platforms. Check the directives:
+
+    ```rust
+    // only-x86_64
+    // only-linux
+    ```
+
+    You may need to skip these locally.
+  </Accordion>
+
+  <Accordion title="Outdated Build Artifacts">
+    Clean and rebuild:
+
+    ```bash
+    rm -rf build/
+    ./x.py build
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Additional Resources
+
+<CardGroup cols={2}>
+  <Card title="rustc-dev-guide: Tests" icon="book" href="https://rustc-dev-guide.rust-lang.org/tests/intro.html">
+    Comprehensive testing documentation
+  </Card>
+  <Card title="compiletest Documentation" icon="file-code" href="https://rustc-dev-guide.rust-lang.org/tests/compiletest.html">
+    Details on the test harness
+  </Card>
+  <Card title="Adding New Tests" icon="plus" href="https://rustc-dev-guide.rust-lang.org/tests/adding.html">
+    Step-by-step guide for new tests
+  </Card>
+  <Card title="CI Configuration" icon="gears" href="https://github.com/rust-lang/rust/blob/master/.github/workflows/ci.yml">
+    View the CI workflow definition
+  </Card>
+</CardGroup>
+
+## Summary
+
+<Steps>
+  <Step title="Choose the Right Test Suite">
+    Use UI tests for most cases, run-make for complex scenarios
+  </Step>
+  <Step title="Write Minimal Tests">
+    Keep tests focused and as small as possible
+  </Step>
+  <Step title="Test Locally First">
+    Run `./x.py test` on your changes before pushing
+  </Step>
+  <Step title="Update Expectations">
+    Use `--bless` when error messages legitimately change
+  </Step>
+  <Step title="Monitor CI">
+    Watch CI results and fix failures promptly
+  </Step>
+</Steps>
+
+<Card title="Back to Workflow" icon="arrow-left" href="/contributing/workflow">
+  Return to the contribution workflow guide
+</Card>

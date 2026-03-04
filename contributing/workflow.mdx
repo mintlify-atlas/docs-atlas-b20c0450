@@ -1,0 +1,441 @@
+---
+title: "Contribution Workflow"
+description: "Learn the workflow for contributing code, from making changes to submitting pull requests"
+---
+
+This guide walks you through the complete workflow for contributing to the Rust compiler project.
+
+## Before You Start
+
+<Steps>
+  <Step title="Read the rustc-dev-guide">
+    Familiarize yourself with the [rustc-dev-guide](https://rustc-dev-guide.rust-lang.org/) to understand the compiler architecture and development practices
+  </Step>
+  <Step title="Find an Issue">
+    Look for issues labeled with `E-easy`, `E-mentor`, or `good first issue` on the [issue tracker](https://github.com/rust-lang/rust/issues)
+  </Step>
+  <Step title="Ask for Assignment">
+    Comment on the issue expressing your interest. Maintainers will often assign it to you and provide guidance
+  </Step>
+</Steps>
+
+<Tip>
+Join the [#new members](https://rust-lang.zulipchat.com/#narrow/stream/122652-new-members) Zulip stream to get help and find mentorship.
+</Tip>
+
+## Making Changes
+
+### 1. Create a Branch
+
+Create a new branch for your work:
+
+```bash
+git checkout -b fix-issue-12345
+```
+
+<Note>
+Use descriptive branch names that reference the issue number or describe the change, e.g., `fix-ice-in-trait-resolution` or `improve-error-message-12345`.
+</Note>
+
+### 2. Make Your Changes
+
+Edit the relevant source files. The main areas of the codebase include:
+
+| Directory | Purpose |
+|-----------|----------|
+| `compiler/` | Compiler implementation (rustc) |
+| `library/` | Standard library and core libraries |
+| `src/tools/` | Additional tools (Cargo, rustfmt, Clippy, etc.) |
+| `tests/` | Test suites |
+
+### 3. Build and Test Locally
+
+Before committing, verify your changes:
+
+<Tabs>
+  <Tab title="Quick Check">
+    Use `check` for fast feedback without generating binaries:
+
+    ```bash
+    ./x.py check
+    ```
+
+    This is much faster than a full build and catches most compilation errors.
+  </Tab>
+
+  <Tab title="Full Build">
+    Build the compiler and standard library:
+
+    ```bash
+    ./x.py build
+    ```
+
+    To build specific components:
+
+    ```bash
+    # Build only the compiler
+    ./x.py build compiler
+
+    # Build the standard library
+    ./x.py build library/std
+    ```
+  </Tab>
+
+  <Tab title="Run Tests">
+    Run the test suite to ensure nothing broke:
+
+    ```bash
+    # Run all tests (takes a long time)
+    ./x.py test
+
+    # Run specific test suite
+    ./x.py test tests/ui
+
+    # Run a specific test file
+    ./x.py test tests/ui/issues/issue-12345.rs
+    ```
+  </Tab>
+</Tabs>
+
+### 4. Tidy Check
+
+The Rust project uses a tidy script to enforce style and consistency:
+
+```bash
+./x.py test tidy
+```
+
+This checks for:
+- Code formatting issues
+- Missing license headers
+- Trailing whitespace
+- File naming conventions
+- Other project-specific rules
+
+<Warning>
+Your CI builds will fail if tidy checks don't pass. Always run this before committing.
+</Warning>
+
+## Writing Good Commit Messages
+
+Commit messages should be clear and descriptive:
+
+<CodeGroup>
+```bash Good Example
+git commit -m "Fix ICE when using associated types in trait bounds
+
+This fixes an internal compiler error that occurred when associated
+types were used in certain trait bound positions.
+
+Fixes #12345"
+```
+
+```bash Bad Example
+git commit -m "fix bug"
+```
+</CodeGroup>
+
+### Commit Message Guidelines
+
+- **First line**: Brief summary (50 characters or less)
+- **Body**: Detailed explanation of what and why (wrap at 72 characters)
+- **References**: Include `Fixes #issue-number` to auto-close issues
+
+## Creating a Pull Request
+
+### 1. Push Your Branch
+
+```bash
+git push origin fix-issue-12345
+```
+
+### 2. Open the Pull Request
+
+Go to [github.com/rust-lang/rust](https://github.com/rust-lang/rust) and click "New Pull Request".
+
+### 3. Write a Good PR Description
+
+Your PR description should include:
+
+<Steps>
+  <Step title="Summary">
+    A clear explanation of what the PR does and why
+  </Step>
+  <Step title="Context">
+    Link to the issue being fixed or RFC being implemented
+  </Step>
+  <Step title="Testing">
+    Describe what testing you've done
+  </Step>
+  <Step title="Checklist">
+    Confirm you've run tests, tidy, and read relevant documentation
+  </Step>
+</Steps>
+
+Example PR template:
+
+```markdown
+## Summary
+
+Fixes an ICE when using associated types in trait bounds.
+
+## Details
+
+The compiler was panicking when encountering associated types in
+certain positions within trait bounds. This PR adds proper handling
+for these cases.
+
+Fixes #12345
+
+## Testing
+
+- Added regression test `tests/ui/issues/issue-12345.rs`
+- Ran `./x.py test tests/ui`
+- Ran `./x.py test tidy`
+```
+
+## The Review Process
+
+### Understanding the Bots
+
+Rust uses several bots to manage the development workflow:
+
+<AccordionGroup>
+  <Accordion title="bors - The Merge Bot">
+    **bors** manages the merge queue and runs CI tests before merging.
+
+    Common commands:
+    - `@bors r+` - Approve and queue for merging (reviewers only)
+    - `@bors r+ rollup` - Approve for rollup (low-risk changes)
+    - `@bors try` - Run CI without merging (reviewers only)
+  </Accordion>
+
+  <Accordion title="rustbot - The Issue Bot">
+    **rustbot** helps with issue and PR management.
+
+    Common commands:
+    - `@rustbot label +T-compiler` - Add labels
+    - `@rustbot ready` - Mark PR as ready for review
+    - `@rustbot author` - Move PR back to author for changes
+  </Accordion>
+
+  <Accordion title="triagebot - The Triage Bot">
+    **triagebot** automates PR assignment and notifications.
+
+    Handles:
+    - Automatic reviewer assignment
+    - Ping groups (e.g., `@rustbot ping windows`)
+    - PR state transitions
+  </Accordion>
+</AccordionGroup>
+
+### Typical Review Timeline
+
+<Steps>
+  <Step title="Initial Review (1-7 days)">
+    A reviewer will be assigned automatically or you can request one with `r? @username`
+  </Step>
+  <Step title="Feedback & Iteration">
+    Address review comments by pushing new commits to your branch
+  </Step>
+  <Step title="Approval">
+    Once approved, the reviewer will run `@bors r+` to queue the PR
+  </Step>
+  <Step title="CI Testing (2-4 hours)">
+    bors will run the full test suite across all platforms
+  </Step>
+  <Step title="Merge">
+    If CI passes, bors automatically merges your PR
+  </Step>
+</Steps>
+
+<Note>
+If CI fails, bors will post the failure details. You'll need to fix the issues and the reviewer will re-approve with `@bors r+`.
+</Note>
+
+## Responding to Review Feedback
+
+### Making Changes
+
+When a reviewer requests changes:
+
+```bash
+# Make the requested changes
+vim compiler/rustc_typeck/src/check/mod.rs
+
+# Test your changes
+./x.py test tests/ui
+
+# Commit and push
+git add .
+git commit -m "Address review feedback
+
+- Simplified the error handling logic
+- Added documentation to the new function
+- Fixed formatting issues"
+git push
+```
+
+### Rebasing on Latest Master
+
+If your PR has conflicts or you want the latest changes:
+
+```bash
+# Update your local master
+git checkout master
+git pull upstream master
+
+# Rebase your branch
+git checkout fix-issue-12345
+git rebase master
+
+# Force push (rebase changes history)
+git push --force-with-lease
+```
+
+<Warning>
+Always use `--force-with-lease` instead of `--force` to avoid accidentally overwriting others' work.
+</Warning>
+
+## CI and Automated Testing
+
+The Rust CI system runs comprehensive tests on every PR:
+
+### CI Jobs
+
+The CI runs multiple jobs defined in `.github/workflows/ci.yml`:
+
+- **x86_64-gnu-llvm**: Linux build with LLVM tests
+- **x86_64-gnu-tools**: Tests for rustfmt, Clippy, etc.
+- **mingw-check**: Windows MinGW build
+- **x86_64-msvc**: Windows MSVC build
+- **dist-various-1**: Distribution builds for various targets
+- And many more...
+
+<Tip>
+You can see which jobs failed by clicking on the "Details" link next to the failed CI check on your PR.
+</Tip>
+
+### Try Builds
+
+Reviewers can trigger a "try build" before approving:
+
+```
+@bors try
+```
+
+This runs CI without merging, useful for:
+- Testing platform-specific changes
+- Verifying fixes before approval
+- Running performance tests
+
+## Special Cases
+
+### Rollup PRs
+
+Low-risk changes (like docs, test additions) are often combined into "rollup" PRs:
+
+```
+@bors r+ rollup
+```
+
+This is faster and reduces CI load.
+
+### Performance Impact
+
+For changes that might affect performance:
+
+```
+@rust-timer queue
+```
+
+This queues a performance test run to measure the impact.
+
+### Backports
+
+Critical fixes may need backporting to beta or stable:
+
+1. Add the `beta-nominated` or `stable-nominated` label
+2. Justify the backport in a comment
+3. The release team will review and approve
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Keep PRs Focused" icon="bullseye">
+    One logical change per PR. Avoid mixing refactoring with new features.
+  </Card>
+  <Card title="Write Tests" icon="flask">
+    Always add tests for bug fixes and new features.
+  </Card>
+  <Card title="Update Docs" icon="book">
+    If you change public APIs, update the documentation.
+  </Card>
+  <Card title="Be Patient" icon="clock">
+    Reviewers are volunteers. Reviews can take days or weeks.
+  </Card>
+  <Card title="Ask Questions" icon="circle-question">
+    If you're unsure, ask on Zulip. The community is helpful!
+  </Card>
+  <Card title="Run Tidy" icon="broom">
+    Always run `./x.py test tidy` before pushing.
+  </Card>
+</CardGroup>
+
+## Common Workflow Commands
+
+Here's a quick reference of common commands:
+
+```bash
+# Update your fork
+git fetch upstream
+git checkout master
+git merge upstream/master
+
+# Create a new branch
+git checkout -b my-feature
+
+# Check your changes
+./x.py check
+
+# Run tests
+./x.py test tests/ui
+
+# Run formatting and style checks
+./x.py test tidy
+
+# Build documentation
+./x.py doc
+
+# Commit changes
+git add .
+git commit -m "Descriptive message"
+
+# Push to your fork
+git push origin my-feature
+```
+
+## Getting Help
+
+If you get stuck at any point:
+
+<CardGroup cols={2}>
+  <Card title="Zulip Chat" icon="comments" href="https://rust-lang.zulipchat.com">
+    Real-time help from the community
+  </Card>
+  <Card title="rustc-dev-guide" icon="book" href="https://rustc-dev-guide.rust-lang.org/">
+    Comprehensive development documentation
+  </Card>
+  <Card title="This Week in Rust" icon="newspaper" href="https://this-week-in-rust.org/">
+    Stay updated with Rust development
+  </Card>
+  <Card title="Forge" icon="hammer" href="https://forge.rust-lang.org/">
+    Team documentation and procedures
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Testing Guidelines" icon="flask" href="/contributing/testing">
+  Learn how to write effective tests for your contributions
+</Card>

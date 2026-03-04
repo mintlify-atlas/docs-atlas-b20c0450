@@ -1,0 +1,411 @@
+---
+title: MIR (Mid-level Intermediate Representation)
+description: Understanding rustc's Mid-level Intermediate Representation used for optimization and code generation
+---
+
+MIR (Mid-level Intermediate Representation) is the heart of the Rust compiler's optimization and code generation pipeline. It's a control-flow graph representation that is simpler than HIR but still retains high-level information about the program.
+
+<Info>
+MIR is designed to be easy to analyze and transform while being detailed enough to support advanced optimizations and precise code generation.
+</Info>
+
+## What is MIR?
+
+MIR represents a Rust program as a control-flow graph (CFG) of basic blocks:
+
+```rust
+/// The core MIR data structure representing a function body
+pub struct Body<'tcx> {
+    /// Basic blocks that make up the control flow graph
+    pub basic_blocks: BasicBlocks<'tcx>,
+    
+    /// Local variables (including arguments and return place)
+    pub local_decls: IndexVec<Local, LocalDecl<'tcx>>,
+    
+    /// User type annotations
+    pub user_type_annotations: IndexVec<UserTypeAnnotationIndex, UserTypeAnnotation<'tcx>>,
+    
+    /// Current compilation phase
+    pub phase: MirPhase,
+    
+    // ... and more fields
+}
+```
+
+## MIR Phases
+
+MIR goes through several phases during compilation:
+
+```rust
+pub enum MirPhase {
+    /// Initial MIR constructed from HIR
+    Built,
+    
+    /// Analysis phase (type checking, borrow checking)
+    Analysis(AnalysisPhase),
+    
+    /// Runtime optimization phase
+    Runtime(RuntimePhase),
+}
+
+pub enum RuntimePhase {
+    Initial,
+    PostCleanup,
+    Optimized,
+}
+```
+
+<Steps>
+  <Step title="Built Phase">
+    MIR is initially constructed from HIR by `rustc_mir_build`. This is a direct translation with minimal transformation.
+  </Step>
+  
+  <Step title="Analysis Phase">
+    Type checking and borrow checking run on the MIR. Checks ensure memory safety and type correctness.
+  </Step>
+  
+  <Step title="Runtime Phase">
+    Optimizations are applied: inlining, constant propagation, dead code elimination, and more.
+  </Step>
+</Steps>
+
+## Basic Blocks
+
+A basic block is a sequence of statements followed by a terminator:
+
+```rust
+pub struct BasicBlockData<'tcx> {
+    /// Sequence of statements in this block
+    pub statements: Vec<Statement<'tcx>>,
+    
+    /// Terminator instruction (how control flow exits this block)
+    pub terminator: Option<Terminator<'tcx>>,
+    
+    /// True if this block is reachable
+    pub is_cleanup: bool,
+}
+```
+
+### Statements
+
+Statements perform operations without transferring control:
+
+```rust
+pub enum StatementKind<'tcx> {
+    /// Assign the rvalue to the lvalue
+    Assign(Box<(Place<'tcx>, Rvalue<'tcx>)>),
+    
+    /// Mark a local as live at this point
+    StorageLive(Local),
+    
+    /// Mark a local as dead at this point
+    StorageDead(Local),
+    
+    /// Set discriminant for an enum
+    SetDiscriminant { place: Box<Place<'tcx>>, variant_index: VariantIdx },
+    
+    /// No-op (used during optimization)
+    Nop,
+    
+    // ... and more
+}
+```
+
+### Terminators
+
+Terminators transfer control to other basic blocks:
+
+```rust
+pub enum TerminatorKind<'tcx> {
+    /// Goto a single successor block
+    Goto { target: BasicBlock },
+    
+    /// Branch based on condition
+    SwitchInt { discr: Operand<'tcx>, targets: SwitchTargets },
+    
+    /// Return from function
+    Return,
+    
+    /// Abort the program
+    Unreachable,
+    
+    /// Drop a value
+    Drop { place: Place<'tcx>, target: BasicBlock, unwind: UnwindAction },
+    
+    /// Call a function
+    Call {
+        func: Operand<'tcx>,
+        args: Vec<Operand<'tcx>>,
+        destination: Place<'tcx>,
+        target: Option<BasicBlock>,
+        unwind: UnwindAction,
+        // ... and more fields
+    },
+    
+    /// Assert a condition
+    Assert {
+        cond: Operand<'tcx>,
+        expected: bool,
+        msg: Box<AssertMessage<'tcx>>,
+        target: BasicBlock,
+        unwind: UnwindAction,
+    },
+    
+    // ... and more
+}
+```
+
+## Places and Values
+
+### Places (Lvalues)
+
+Places represent memory locations:
+
+```rust
+pub struct Place<'tcx> {
+    pub local: Local,
+    pub projection: &'tcx [PlaceElem<'tcx>],
+}
+
+pub enum PlaceElem<'tcx> {
+    /// Dereference a pointer
+    Deref,
+    
+    /// Access a field
+    Field(FieldIdx, Ty<'tcx>),
+    
+    /// Index into an array
+    Index(Local),
+    
+    /// Downcast to a specific enum variant
+    Downcast(Option<Symbol>, VariantIdx),
+    
+    // ... and more
+}
+```
+
+Example places:
+- `_1` - Local variable 1
+- `(*_1)` - Dereference local 1
+- `_1.0` - Field 0 of local 1
+- `_1[_2]` - Index local 1 by local 2
+
+### Rvalues
+
+Rvalues represent computations that produce values:
+
+```rust
+pub enum Rvalue<'tcx> {
+    /// Read the value from a place
+    Use(Operand<'tcx>),
+    
+    /// Perform a binary operation
+    BinaryOp(BinOp, Box<(Operand<'tcx>, Operand<'tcx>)>),
+    
+    /// Perform a unary operation
+    UnaryOp(UnOp, Operand<'tcx>),
+    
+    /// Cast a value
+    Cast(CastKind, Operand<'tcx>, Ty<'tcx>),
+    
+    /// Create a reference
+    Ref(Region<'tcx>, BorrowKind, Place<'tcx>),
+    
+    /// Create an aggregate (struct, tuple, array)
+    Aggregate(Box<AggregateKind<'tcx>>, Vec<Operand<'tcx>>),
+    
+    // ... and more
+}
+```
+
+## MIR Construction
+
+The `rustc_mir_build` crate builds MIR from HIR:
+
+<Note>
+MIR construction happens through an intermediate representation called THIR (Typed High-level Intermediate Representation), which represents pattern matching and other complex control flow more explicitly.
+</Note>
+
+```rust
+// From rustc_mir_build/src/lib.rs
+// The builder module constructs MIR from HIR
+
+pub fn provide(providers: &mut Providers) {
+    providers.queries.check_match = thir::pattern::check_match;
+    providers.queries.lit_to_const = thir::constant::lit_to_const;
+    providers.hooks.build_mir_inner_impl = builder::build_mir_inner_impl;
+}
+```
+
+## MIR Transformations
+
+The `rustc_mir_transform` crate contains numerous optimization passes:
+
+### Common Passes
+
+<Accordion title="SimplifyCfg">
+  Simplifies the control flow graph by removing unreachable blocks, merging blocks, and eliminating redundant branches.
+</Accordion>
+
+<Accordion title="Inline">
+  Inlines function calls to eliminate call overhead and enable further optimizations.
+</Accordion>
+
+<Accordion title="ConstProp / GVN">
+  Propagates constants and performs global value numbering to eliminate redundant computations.
+</Accordion>
+
+<Accordion title="DeadStoreElimination">
+  Removes assignments to variables that are never read.
+</Accordion>
+
+<Accordion title="CopyProp">
+  Propagates copies to eliminate unnecessary assignments.
+</Accordion>
+
+<Accordion title="InstSimplify">
+  Simplifies individual instructions, like replacing `x + 0` with `x`.
+</Accordion>
+
+<Accordion title="ElaborateDrops">
+  Expands drop operations into cleanup code.
+</Accordion>
+
+### Pass Declaration
+
+Passes are declared using a macro system:
+
+```rust
+declare_passes! {
+    mod abort_unwinding_calls : AbortUnwindingCalls;
+    mod add_call_guards : AddCallGuards { AllCallEdges, CriticalCallEdges };
+    mod cleanup_post_borrowck : CleanupPostBorrowck;
+    mod copy_prop : CopyProp;
+    mod dataflow_const_prop : DataflowConstProp;
+    mod dead_store_elimination : DeadStoreElimination { Initial, Final };
+    pub mod inline : Inline, ForceInline;
+    mod gvn : GVN;
+    mod jump_threading : JumpThreading;
+    // ... many more passes
+}
+```
+
+## Example MIR
+
+Here's what MIR looks like for a simple function:
+
+```rust
+// Source code:
+fn add(x: i32, y: i32) -> i32 {
+    x + y
+}
+
+// Simplified MIR:
+fn add(_1: i32, _2: i32) -> i32 {
+    let mut _0: i32;
+    
+    bb0: {
+        _0 = Add(_1, _2);
+        return;
+    }
+}
+```
+
+A more complex example with control flow:
+
+```rust
+// Source code:
+fn max(x: i32, y: i32) -> i32 {
+    if x > y {
+        x
+    } else {
+        y
+    }
+}
+
+// Simplified MIR:
+fn max(_1: i32, _2: i32) -> i32 {
+    let mut _0: i32;
+    let mut _3: bool;
+    
+    bb0: {
+        _3 = Gt(_1, _2);
+        switchInt(move _3) -> [0: bb2, otherwise: bb1];
+    }
+    
+    bb1: {
+        _0 = _1;
+        goto -> bb3;
+    }
+    
+    bb2: {
+        _0 = _2;
+        goto -> bb3;
+    }
+    
+    bb3: {
+        return;
+    }
+}
+```
+
+## Borrowck on MIR
+
+The borrow checker (`rustc_borrowck`) operates on MIR:
+
+- Analyzes dataflow to track which borrows are live at each point
+- Checks that no mutable borrow exists alongside other borrows
+- Verifies that values are not moved while borrowed
+- Ensures references don't outlive their referents
+
+<Info>
+Running borrow checking on MIR instead of HIR provides more precise analysis because MIR makes control flow and data flow explicit.
+</Info>
+
+## Constant Evaluation
+
+The `rustc_const_eval` crate evaluates constants at compile time using MIR:
+
+- Executes MIR in an interpreter to compute constant values
+- Supports const functions, const generics, and array lengths
+- Detects undefined behavior in constant contexts
+
+## Visualizing MIR
+
+You can view MIR for your code using compiler flags:
+
+```bash
+# Emit MIR for all functions
+rustc --emit mir main.rs
+
+# Emit MIR in graphviz format
+rustc -Z dump-mir-graphviz main.rs
+```
+
+## Benefits of MIR
+
+<CardGroup cols={2}>
+  <Card title="Precise Analysis">
+    Explicit control flow and data flow enable precise borrow checking and optimization
+  </Card>
+  <Card title="Easy Transformation">
+    Simple structure makes writing optimization passes straightforward
+  </Card>
+  <Card title="Backend Independence">
+    MIR abstracts away from specific code generation targets
+  </Card>
+  <Card title="Incremental Compilation">
+    MIR is cached for incremental compilation, speeding up rebuilds
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Code Generation" href="/compiler/codegen">
+    Learn how MIR is translated to machine code
+  </Card>
+  <Card title="Frontend" href="/compiler/frontend">
+    Understand how source code becomes MIR
+  </Card>
+</CardGroup>

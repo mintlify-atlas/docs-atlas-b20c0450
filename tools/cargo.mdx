@@ -1,0 +1,175 @@
+---
+title: Cargo
+description: The Rust package manager and build system
+---
+
+Cargo is Rust's official package manager and build system. It handles downloading dependencies, compiling packages, making distributable packages, and uploading them to [crates.io](https://crates.io).
+
+## Overview
+
+Cargo is a fundamental tool in the Rust ecosystem that simplifies many common tasks:
+
+- Building your project with `cargo build`
+- Running your project with `cargo run`
+- Testing your project with `cargo test`
+- Generating documentation with `cargo doc`
+- Publishing libraries to crates.io with `cargo publish`
+
+<Note>
+Cargo is maintained as a separate submodule in the Rust compiler repository. It is located at `src/tools/cargo/` but contains its own extensive codebase.
+</Note>
+
+## Integration with the Rust Compiler
+
+Cargo is built as part of the Rust toolchain and is distributed alongside the compiler. When you install Rust through rustup, you automatically get Cargo.
+
+### Build Process
+
+In the Rust compiler's bootstrap system, Cargo is built using special handling:
+
+<Steps>
+  <Step title="Submodule Management">
+    Cargo is maintained as a Git submodule in `src/tools/cargo/`. The bootstrap system ensures this submodule is properly initialized and updated.
+  </Step>
+  
+  <Step title="Compilation">
+    The tool is compiled using `ToolBuild` with `Mode::ToolRustcPrivate` or specific cargo handling, enabling LTO optimizations for better performance.
+  </Step>
+  
+  <Step title="Distribution">
+    The compiled cargo binary is installed to the sysroot and included in all Rust distributions.
+  </Step>
+</Steps>
+
+## Key Features
+
+### Dependency Management
+
+Cargo uses `Cargo.toml` manifest files to define project dependencies:
+
+```toml
+[package]
+name = "my-project"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.0", features = ["full"] }
+```
+
+### Workspace Support
+
+Cargo supports multi-package projects called workspaces, allowing you to manage multiple related packages together:
+
+```toml
+[workspace]
+members = [
+    "crate-a",
+    "crate-b",
+    "crate-c",
+]
+```
+
+### Build Scripts
+
+Cargo allows custom build logic through `build.rs` files that run before compilation:
+
+```rust
+// build.rs
+fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+    // Custom build logic here
+}
+```
+
+## Common Commands
+
+<CardGroup cols={2}>
+  <Card title="cargo build" icon="hammer">
+    Compile the current package and all dependencies.
+    
+    ```bash
+    cargo build --release
+    ```
+  </Card>
+  
+  <Card title="cargo run" icon="play">
+    Build and execute the main binary of the package.
+    
+    ```bash
+    cargo run -- --args-for-binary
+    ```
+  </Card>
+  
+  <Card title="cargo test" icon="vial">
+    Run all tests in the package.
+    
+    ```bash
+    cargo test --all-features
+    ```
+  </Card>
+  
+  <Card title="cargo check" icon="check">
+    Check code for errors without producing a binary.
+    
+    ```bash
+    cargo check --all-targets
+    ```
+  </Card>
+</CardGroup>
+
+## Usage in the Compiler Project
+
+Within the Rust compiler repository, Cargo is used extensively but the repository itself uses a custom build system called `x.py` (the bootstrap system) rather than Cargo for top-level builds.
+
+<Tip>
+The bootstrap system in `src/bootstrap/` orchestrates building all components including Cargo itself, the compiler, standard library, and other tools.
+</Tip>
+
+### Building Cargo from Source
+
+To build Cargo as part of the Rust compiler:
+
+```bash
+./x build cargo
+```
+
+This will:
+1. Ensure the appropriate compiler stage is built
+2. Build Cargo with optimizations if configured
+3. Install the binary to the build output directory
+
+## Configuration
+
+Cargo can be configured through:
+
+- **`.cargo/config.toml`**: Repository or user-level configuration
+- **Environment variables**: `CARGO_*` variables
+- **Command-line flags**: Override any configuration
+
+### Example Configuration
+
+```toml
+# .cargo/config.toml
+[build]
+target-dir = "target"
+jobs = 4
+
+[term]
+verbose = false
+color = 'auto'
+
+[net]
+git-fetch-with-cli = true
+```
+
+## Resources
+
+- **Official Repository**: [github.com/rust-lang/cargo](https://github.com/rust-lang/cargo)
+- **Documentation**: [doc.rust-lang.org/cargo](https://doc.rust-lang.org/cargo/)
+- **The Cargo Book**: Comprehensive guide to using Cargo
+
+<Warning>
+When building the Rust compiler, Cargo is treated specially in the build system due to its critical role in the Rust ecosystem.
+</Warning>

@@ -1,122 +1,138 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Rust",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#CE422B",
+    "light": "#F74C00",
+    "dark": "#A33124"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/rust-lang/rust"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/rust-lang/rust"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Building from Source",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "building/overview",
+              "building/dependencies",
+              "building/unix",
+              "building/windows",
+              "building/configuration"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Architecture",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "architecture/overview",
+              "architecture/compiler",
+              "architecture/standard-library",
+              "architecture/bootstrap"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Compiler",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "compiler/overview",
+              "compiler/frontend",
+              "compiler/mir",
+              "compiler/codegen",
+              "compiler/incremental"
+            ]
+          },
+          {
+            "group": "Standard Library",
+            "pages": [
+              "stdlib/core",
+              "stdlib/alloc",
+              "stdlib/std",
+              "stdlib/proc-macro"
+            ]
+          },
+          {
+            "group": "Tooling",
+            "pages": [
+              "tools/cargo",
+              "tools/rustdoc",
+              "tools/clippy",
+              "tools/rustfmt",
+              "tools/miri"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Contributing",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Contributing Guide",
             "pages": [
-              "api-reference/introduction"
+              "contributing/overview",
+              "contributing/setup",
+              "contributing/workflow",
+              "contributing/testing"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Development",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "development/compiler-development",
+              "development/library-development",
+              "development/debugging",
+              "development/profiling"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Compiler Internals",
+            "pages": [
+              "reference/compiler-crates",
+              "reference/passes",
+              "reference/queries"
+            ]
+          },
+          {
+            "group": "Build System",
+            "pages": [
+              "reference/bootstrap",
+              "reference/x-py",
+              "reference/configuration-options"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "reference/platform-support",
+              "reference/release-process",
+              "reference/glossary"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

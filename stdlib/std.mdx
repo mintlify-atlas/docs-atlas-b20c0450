@@ -1,0 +1,629 @@
+---
+title: Standard Library
+description: The foundation of portable Rust software - a set of minimal and battle-tested shared abstractions
+---
+
+The Rust Standard Library is the foundation of portable Rust software, a set of minimal and battle-tested shared abstractions for the broader Rust ecosystem. It offers core types, library-defined operations on language primitives, standard macros, I/O, multithreading, and much more.
+
+<Note>
+`std` is available to all Rust crates by default. Access it in `use` statements through the path `std`, as in `use std::env`.
+</Note>
+
+## Overview
+
+The standard library provides:
+
+- **Core types** like `Vec<T>`, `Option<T>`, `Result<T, E>`
+- **Platform abstractions** for OS interfaces
+- **I/O operations** for files, networking, and streams
+- **Multithreading** and concurrency primitives
+- **Collections** and data structures
+- **String handling** and text processing
+
+### Key Modules
+
+<CardGroup cols={3}>
+  <Card title="collections" icon="layer-group">
+    HashMap, HashSet, and other collections
+  </Card>
+  <Card title="io" icon="arrow-right-arrow-left">
+    Input/output operations
+  </Card>
+  <Card title="fs" icon="folder">
+    Filesystem operations
+  </Card>
+  <Card title="net" icon="network-wired">
+    TCP/UDP networking
+  </Card>
+  <Card title="thread" icon="diagram-project">
+    Threading abstractions
+  </Card>
+  <Card title="sync" icon="lock">
+    Synchronization primitives
+  </Card>
+  <Card title="process" icon="terminal">
+    Process management
+  </Card>
+  <Card title="env" icon="globe">
+    Environment interaction
+  </Card>
+  <Card title="path" icon="route">
+    Path manipulation
+  </Card>
+</CardGroup>
+
+## Containers and Collections
+
+### Optional and Error Types
+
+<Accordion title="Option<T> - Optional values">
+```rust
+fn divide(numerator: f64, denominator: f64) -> Option<f64> {
+    if denominator == 0.0 {
+        None
+    } else {
+        Some(numerator / denominator)
+    }
+}
+
+match divide(4.0, 2.0) {
+    Some(result) => println!("Result: {}", result),
+    None => println!("Cannot divide by zero"),
+}
+```
+
+**Common methods:**
+- `unwrap()` - Get value or panic
+- `expect(msg)` - Unwrap with custom message
+- `unwrap_or(default)` - Get value or default
+- `map(f)` - Transform the contained value
+- `and_then(f)` - Chain operations
+</Accordion>
+
+<Accordion title="Result<T, E> - Error handling">
+```rust
+use std::fs::File;
+use std::io::Read;
+
+fn read_file(path: &str) -> Result<String, std::io::Error> {
+    let mut file = File::open(path)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+    Ok(contents)
+}
+
+match read_file("data.txt") {
+    Ok(contents) => println!("File contents: {}", contents),
+    Err(e) => eprintln!("Error reading file: {}", e),
+}
+```
+
+**The `?` operator:**
+Propagates errors automatically in functions returning `Result`.
+</Accordion>
+
+### Collections
+
+<Accordion title="Vec<T> - Growable arrays">
+```rust
+let mut v = Vec::new();
+v.push(1);
+v.push(2);
+v.push(3);
+
+let v = vec![1, 2, 3];
+let v = vec![0; 10]; // ten zeroes
+
+// Iteration
+for item in &v {
+    println!("{}", item);
+}
+
+// Methods
+v.extend([4, 5, 6]);
+v.retain(|&x| x % 2 == 0);
+v.sort();
+```
+</Accordion>
+
+<Accordion title="HashMap<K, V> - Hash tables">
+```rust
+use std::collections::HashMap;
+
+let mut scores = HashMap::new();
+scores.insert(String::from("Blue"), 10);
+scores.insert(String::from("Red"), 50);
+
+// Access
+let score = scores.get("Blue");
+let score = scores.get("Blue").copied().unwrap_or(0);
+
+// Iteration
+for (key, value) in &scores {
+    println!("{}: {}", key, value);
+}
+
+// Entry API
+scores.entry(String::from("Yellow")).or_insert(50);
+```
+</Accordion>
+
+<Accordion title="HashSet<T> - Unique values">
+```rust
+use std::collections::HashSet;
+
+let mut set = HashSet::new();
+set.insert(1);
+set.insert(2);
+set.insert(2); // Duplicate ignored
+
+// Set operations
+let a: HashSet<_> = [1, 2, 3].iter().cloned().collect();
+let b: HashSet<_> = [2, 3, 4].iter().cloned().collect();
+
+let union: HashSet<_> = a.union(&b).cloned().collect();
+let intersection: HashSet<_> = a.intersection(&b).cloned().collect();
+```
+</Accordion>
+
+## Platform Abstractions and I/O
+
+### File System Operations
+
+<Accordion title="fs - File system">
+```rust
+use std::fs;
+use std::io::prelude::*;
+
+// Reading files
+let contents = fs::read_to_string("file.txt")?;
+let bytes = fs::read("file.bin")?;
+
+// Writing files
+fs::write("output.txt", "Hello, world!")?;
+
+// File operations
+let mut file = fs::File::create("log.txt")?;
+file.write_all(b"Log entry\n")?;
+
+// Directory operations
+fs::create_dir("new_dir")?;
+fs::create_dir_all("path/to/nested/dir")?;
+fs::remove_dir("old_dir")?;
+
+// Metadata
+let metadata = fs::metadata("file.txt")?;
+println!("File size: {} bytes", metadata.len());
+
+// Reading directories
+for entry in fs::read_dir(".")? {
+    let entry = entry?;
+    println!("Found: {:?}", entry.path());
+}
+```
+</Accordion>
+
+### I/O Operations
+
+<Accordion title="io - Input/output">
+```rust
+use std::io::{self, Read, Write, BufRead, BufReader};
+
+// Reading from stdin
+let mut input = String::new();
+io::stdin().read_line(&mut input)?;
+
+// Writing to stdout/stderr
+println!("To stdout");
+eprintln!("To stderr");
+
+// Buffered I/O
+let file = fs::File::open("data.txt")?;
+let reader = BufReader::new(file);
+
+for line in reader.lines() {
+    let line = line?;
+    println!("Line: {}", line);
+}
+
+// Read trait
+let mut buffer = [0; 10];
+file.read(&mut buffer)?;
+
+// Write trait
+file.write_all(b"data")?;
+```
+</Accordion>
+
+### Networking
+
+<Accordion title="net - TCP and UDP">
+```rust
+use std::net::{TcpListener, TcpStream, UdpSocket};
+use std::io::{Read, Write};
+
+// TCP Server
+let listener = TcpListener::bind("127.0.0.1:8080")?;
+for stream in listener.incoming() {
+    let mut stream = stream?;
+    stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n")?;
+}
+
+// TCP Client
+let mut stream = TcpStream::connect("127.0.0.1:8080")?;
+stream.write_all(b"GET / HTTP/1.1\r\n\r\n")?;
+
+let mut buffer = [0; 512];
+let n = stream.read(&mut buffer)?;
+
+// UDP Socket
+let socket = UdpSocket::bind("127.0.0.1:3400")?;
+socket.send_to(b"hello", "127.0.0.1:3401")?;
+
+let mut buf = [0; 10];
+let (amt, src) = socket.recv_from(&mut buf)?;
+```
+</Accordion>
+
+## Concurrency and Threading
+
+### Threading
+
+<Accordion title="thread - Thread management">
+```rust
+use std::thread;
+use std::time::Duration;
+
+// Spawn a thread
+let handle = thread::spawn(|| {
+    for i in 1..10 {
+        println!("Thread: {}", i);
+        thread::sleep(Duration::from_millis(1));
+    }
+});
+
+// Wait for completion
+handle.join().unwrap();
+
+// Move data into thread
+let v = vec![1, 2, 3];
+let handle = thread::spawn(move || {
+    println!("Vector: {:?}", v);
+});
+
+// Named threads
+let builder = thread::Builder::new()
+    .name("worker".into())
+    .stack_size(4 * 1024 * 1024);
+
+let handle = builder.spawn(|| {
+    println!("Working...");
+})?;
+```
+</Accordion>
+
+### Synchronization Primitives
+
+<Accordion title="sync - Mutex, RwLock, Arc">
+```rust
+use std::sync::{Arc, Mutex, RwLock};
+use std::thread;
+
+// Mutex for exclusive access
+let counter = Arc::new(Mutex::new(0));
+let mut handles = vec![];
+
+for _ in 0..10 {
+    let counter = Arc::clone(&counter);
+    let handle = thread::spawn(move || {
+        let mut num = counter.lock().unwrap();
+        *num += 1;
+    });
+    handles.push(handle);
+}
+
+for handle in handles {
+    handle.join().unwrap();
+}
+
+println!("Result: {}", *counter.lock().unwrap());
+
+// RwLock for reader-writer access
+let lock = RwLock::new(5);
+
+{
+    let r1 = lock.read().unwrap();
+    let r2 = lock.read().unwrap();
+    assert_eq!(*r1, 5);
+} // Read locks dropped
+
+{
+    let mut w = lock.write().unwrap();
+    *w += 1;
+}
+```
+</Accordion>
+
+<Accordion title="sync::mpsc - Message passing">
+```rust
+use std::sync::mpsc;
+use std::thread;
+
+// Multiple producer, single consumer
+let (tx, rx) = mpsc::channel();
+
+thread::spawn(move || {
+    tx.send(42).unwrap();
+});
+
+let received = rx.recv().unwrap();
+println!("Got: {}", received);
+
+// Multiple senders
+let (tx, rx) = mpsc::channel();
+let tx1 = tx.clone();
+
+thread::spawn(move || tx.send(1).unwrap());
+thread::spawn(move || tx1.send(2).unwrap());
+
+for received in rx {
+    println!("Got: {}", received);
+}
+```
+</Accordion>
+
+<Accordion title="sync::atomic - Atomic types">
+```rust
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
+
+let flag = Arc::new(AtomicBool::new(false));
+let counter = Arc::new(AtomicUsize::new(0));
+
+// Atomic operations
+flag.store(true, Ordering::SeqCst);
+let old_val = counter.fetch_add(1, Ordering::SeqCst);
+let current = counter.load(Ordering::SeqCst);
+
+// Compare-and-swap
+let _ = counter.compare_exchange(
+    5, 10, 
+    Ordering::SeqCst, 
+    Ordering::SeqCst
+);
+```
+</Accordion>
+
+## Process and Environment
+
+<Accordion title="process - Process management">
+```rust
+use std::process::Command;
+
+// Run a command
+let output = Command::new("ls")
+    .arg("-la")
+    .output()
+    .expect("Failed to execute command");
+
+println!("Status: {}", output.status);
+println!("Stdout: {}", String::from_utf8_lossy(&output.stdout));
+
+// Spawn and interact
+let mut child = Command::new("cat")
+    .stdin(std::process::Stdio::piped())
+    .spawn()?;
+
+if let Some(mut stdin) = child.stdin.take() {
+    stdin.write_all(b"Hello, cat!")?;
+}
+
+child.wait()?;
+
+// Exit
+std::process::exit(0);
+```
+</Accordion>
+
+<Accordion title="env - Environment variables">
+```rust
+use std::env;
+
+// Get environment variable
+let path = env::var("PATH")?;
+let home = env::var("HOME").unwrap_or_else(|_| String::from("/"));
+
+// Set environment variable
+env::set_var("MY_VAR", "value");
+env::remove_var("MY_VAR");
+
+// Current directory
+let current = env::current_dir()?;
+env::set_current_dir("/tmp")?;
+
+// Command-line arguments
+let args: Vec<String> = env::args().collect();
+for arg in env::args() {
+    println!("Arg: {}", arg);
+}
+```
+</Accordion>
+
+## Time and Duration
+
+<Accordion title="time - Time measurement">
+```rust
+use std::time::{Duration, Instant, SystemTime};
+use std::thread;
+
+// Duration
+let duration = Duration::from_secs(5);
+let duration = Duration::from_millis(100);
+let duration = Duration::from_micros(50);
+
+// Instant (monotonic clock)
+let start = Instant::now();
+thread::sleep(Duration::from_millis(100));
+let elapsed = start.elapsed();
+println!("Elapsed: {:?}", elapsed);
+
+// SystemTime (wall clock)
+let now = SystemTime::now();
+let since_epoch = now.duration_since(SystemTime::UNIX_EPOCH)?;
+println!("Seconds since epoch: {}", since_epoch.as_secs());
+```
+</Accordion>
+
+## Path Handling
+
+<Accordion title="path - Path manipulation">
+```rust
+use std::path::{Path, PathBuf};
+
+// Creating paths
+let path = Path::new("/tmp/file.txt");
+let mut path_buf = PathBuf::from("/tmp");
+path_buf.push("file.txt");
+
+// Path components
+let extension = path.extension(); // Some("txt")
+let file_name = path.file_name(); // Some("file.txt")
+let parent = path.parent(); // Some("/tmp")
+let file_stem = path.file_stem(); // Some("file")
+
+// Path manipulation
+let joined = path.join("subdir");
+let absolute = path.canonicalize()?;
+let exists = path.exists();
+let is_file = path.is_file();
+let is_dir = path.is_dir();
+
+// Iteration
+for component in path.components() {
+    println!("{:?}", component);
+}
+```
+</Accordion>
+
+## String Operations
+
+<Accordion title="String and &str">
+```rust
+// String creation
+let s = String::from("hello");
+let s = "hello".to_string();
+let s = format!("x = {}", 10);
+
+// String manipulation
+let mut s = String::new();
+s.push_str("hello");
+s.push(' ');
+s.push_str("world");
+
+// Concatenation
+let s1 = String::from("Hello, ");
+let s2 = String::from("world!");
+let s3 = s1 + &s2; // s1 moved
+let s = format!("{}{}", s2, s3);
+
+// String slicing
+let hello = &s[0..5];
+let world = &s[6..11];
+
+// Iteration
+for c in s.chars() {
+    println!("{}", c);
+}
+
+for b in s.bytes() {
+    println!("{}", b);
+}
+```
+</Accordion>
+
+## Error Handling
+
+<Accordion title="error - Error trait">
+```rust
+use std::error::Error;
+use std::fmt;
+
+#[derive(Debug)]
+struct MyError {
+    details: String,
+}
+
+impl fmt::Display for MyError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "MyError: {}", self.details)
+    }
+}
+
+impl Error for MyError {}
+
+// Using trait objects
+fn do_something() -> Result<(), Box<dyn Error>> {
+    let file = std::fs::File::open("missing.txt")?;
+    Ok(())
+}
+
+// Error context
+let result = do_something()
+    .map_err(|e| format!("Failed to do something: {}", e));
+```
+</Accordion>
+
+## Macros
+
+<Accordion title="Standard macros">
+```rust
+// Printing
+println!("Hello, world!");
+println!("x = {}, y = {}", 10, 20);
+eprintln!("Error: {}", error);
+
+// String formatting
+let s = format!("Value: {}", 42);
+let s = format!("{:?}", some_struct); // Debug
+let s = format!("{:#?}", some_struct); // Pretty debug
+
+// Assertions
+assert_eq!(2 + 2, 4);
+assert_ne!(2 + 2, 5);
+assert!(true);
+debug_assert!(expensive_check()); // Only in debug builds
+
+// Panicking
+panic!("Something went wrong");
+unreachable!("This code should never execute");
+unimplemented!("TODO: implement this");
+todo!("Not yet implemented");
+
+// Vector creation
+let v = vec![1, 2, 3];
+let v = vec![0; 100]; // 100 zeros
+```
+</Accordion>
+
+## Before and After main()
+
+<Warning>
+Many parts of the standard library are expected to work before and after `main()`, but this is not guaranteed or ensured by tests. Write your own tests for each platform you wish to support.
+
+Some known limitations:
+- After-main use of thread-locals
+- `thread::current()` may not work
+- Under UNIX, file descriptors 0, 1, 2 behavior before main
+</Warning>
+
+## Stability
+
+<Note>
+The standard library has been stable since Rust 1.0.0. It maintains strict backward compatibility and follows semantic versioning.
+</Note>
+
+## Related Libraries
+
+- **core** - Dependency-free foundation
+- **alloc** - Heap allocation primitives
+- **proc_macro** - Procedural macro support
